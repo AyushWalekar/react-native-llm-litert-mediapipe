@@ -1,0 +1,56 @@
+{
+  "name": "react-native-llm-litert-mediapipe",
+  "version": "0.6.0",
+  "description": "Expo module for Google MediaPipe LLM inference",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint",
+    "test": "expo-module test",
+    "prepare": "expo-module prepare",
+    "prepublishOnly": "expo-module prepublishOnly",
+    "expo-module": "expo-module",
+    "open:ios": "xed example/ios",
+    "open:android": "open -a \"Android Studio\" example/android"
+  },
+  "expo": {
+    "name": "react-native-llm-litert-mediapipe",
+    "platforms": [
+      "android"
+    ],
+    "plugin": "./app.plugin.js"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "react-native-llm-litert-mediapipe",
+    "ExpoLlmMediapipe",
+    "llm",
+    "mediapipe",
+    "gemma"
+  ],
+  "repository": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe",
+  "bugs": {
+    "url": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe/issues"
+  },
+  "author": "Ayush Walekar <walekarayush@gmail.com> (https://github.com/AyushWalekar)",
+  "license": "MIT",
+  "homepage": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe#readme",
+  "devDependencies": {
+    "@types/react": "~18.3.12",
+    "expo": "~52.0.0",
+    "expo-module-scripts": "^4.0.3",
+    "react-native": "0.76.0"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "platforms": {
+    "ios": "14.0",
+    "android": "24"
+  }
+}
