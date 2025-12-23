@@ -16,6 +16,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  PermissionsAndroid,
 } from 'react-native';
 
 import { useLLM } from 'react-native-llm-litert-mediapipe';
@@ -33,9 +34,18 @@ import { Recorder } from '@react-native-community/audio-toolkit';
 const MODEL_URL = 'https://huggingface.co/example/gemma-3n-e4b/resolve/main/gemma-3n-e4b.task';
 const MODEL_NAME = 'gemma-3n-e4b.task';
 
-// Fixed local model path (Android) for re-loading an already-copied model
-const FIXED_LOCAL_MODEL_PATH_ANDROID =
+// Preset local model paths (Android) for quick testing
+// MediaPipe .task model (vision support, limited audio)
+const PRESET_MEDIAPIPE_MODEL_PATH =
   '/data/user/0/com.mediapipellmexample/files/16f676c9-6155-462a-a8bf-59247fc4c07b/gemma-3n-E4B-it-int4.task';
+
+// LiteRT-LM .litertlm model (full audio support)
+const PRESET_LITERTLM_MODEL_PATH =
+  '/data/user/0/com.mediapipellmexample/files/litert/gemma-3n-E4B-it-int4.litertlm';
+
+// Detect model type from path
+const isLiteRtLmModel = (path: string) => path.toLowerCase().endsWith('.litertlm');
+const isMediaPipeModel = (path: string) => path.toLowerCase().endsWith('.task');
 
 export default function App() {
   const [prompt, setPrompt] = useState('');
@@ -44,6 +54,7 @@ export default function App() {
   const [localModelPath, setLocalModelPath] = useState<string | null>(null);
   const [localModelName, setLocalModelName] = useState<string | null>(null);
   const [localModelError, setLocalModelError] = useState<string | null>(null);
+  const [modelEngineType, setModelEngineType] = useState<'mediapipe' | 'litertlm' | null>(null);
   
   // Multimodal state
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -61,7 +72,7 @@ export default function App() {
     randomSeed: 42,
     // Enable multimodal for Gemma 3n (Android only)
     enableVisionModality: Platform.OS === 'android',
-    enableAudioModality: false,
+    enableAudioModality: true,
   });
 
   const {
@@ -73,6 +84,22 @@ export default function App() {
     isCheckingStatus,
   } = downloadableLlm;
 
+  // Detect engine type when local model path changes
+  React.useEffect(() => {
+    if (localModelPath) {
+      if (isLiteRtLmModel(localModelPath)) {
+        setModelEngineType('litertlm');
+      } else if (isMediaPipeModel(localModelPath)) {
+        setModelEngineType('mediapipe');
+      } else {
+        setModelEngineType(null);
+      }
+    } else {
+      setModelEngineType(null);
+    }
+  }, [localModelPath]);
+
+  // Local model hook - multimodal options depend on detected engine type
   const localLlm = useLLM({
     storageType: 'file',
     modelPath: localModelPath ?? '',
@@ -80,8 +107,9 @@ export default function App() {
     topK: 40,
     temperature: 0.8,
     randomSeed: 42,
-    enableVisionModality: Platform.OS === 'android',
-    enableAudioModality: false,
+    enableVisionModality: true,
+    // Audio: enable for LiteRT-LM models (MediaPipe .task may not have AudioEncoder)
+    enableAudioModality: Platform.OS === 'android' && modelEngineType === 'litertlm',
   });
 
   const usingLocalModel = Boolean(localModelPath);
@@ -173,9 +201,11 @@ export default function App() {
     setLocalModelPath(null);
     setLocalModelName(null);
     setLocalModelError(null);
+    setModelEngineType(null);
   }, []);
 
-  const handleLoadExistingLocalModel = useCallback(() => {
+  // Load preset MediaPipe model
+  const handleLoadPresetMediaPipe = useCallback(() => {
     setLocalModelError(null);
 
     if (Platform.OS !== 'android') {
@@ -183,8 +213,21 @@ export default function App() {
       return;
     }
 
-    setLocalModelPath(FIXED_LOCAL_MODEL_PATH_ANDROID);
-    setLocalModelName(FIXED_LOCAL_MODEL_PATH_ANDROID.split('/').pop() ?? 'model');
+    setLocalModelPath(PRESET_MEDIAPIPE_MODEL_PATH);
+    setLocalModelName(PRESET_MEDIAPIPE_MODEL_PATH.split('/').pop() ?? 'model');
+  }, []);
+
+  // Load preset LiteRT-LM model
+  const handleLoadPresetLiteRtLm = useCallback(() => {
+    setLocalModelError(null);
+
+    if (Platform.OS !== 'android') {
+      Alert.alert('Not Supported', 'Local fixed-path loading is Android only.');
+      return;
+    }
+
+    setLocalModelPath(PRESET_LITERTLM_MODEL_PATH);
+    setLocalModelName(PRESET_LITERTLM_MODEL_PATH.split('/').pop() ?? 'model');
   }, []);
 
   // Image picker handler
@@ -223,6 +266,24 @@ export default function App() {
   // Audio recording handlers
   const handleStartRecording = useCallback(async () => {
     try {
+      // Request runtime permission on Android
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Audio Recording Permission',
+            message: 'This app needs access to your microphone to record audio.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Audio recording permission is required.');
+          return;
+        }
+      }
+
       const newRecorder = new Recorder('recording.wav');
 
       newRecorder.prepare((err) => {
@@ -315,8 +376,9 @@ export default function App() {
   const getStatusText = () => {
     if (usingLocalModel) {
       if (!localModelPath) return 'No local model selected';
-      if (isLoaded) return '✅ Local model loaded and ready';
-      return 'Loading local model...';
+      const engineLabel = modelEngineType === 'litertlm' ? '🚀 LiteRT-LM' : modelEngineType === 'mediapipe' ? '🔧 MediaPipe' : '❓ Unknown';
+      if (isLoaded) return `✅ ${engineLabel} model loaded and ready`;
+      return `Loading ${engineLabel} model...`;
     }
     if (isCheckingStatus) return 'Checking model status...';
     if (downloadStatus === 'not_downloaded') return 'Model not downloaded';
@@ -346,7 +408,10 @@ export default function App() {
           <View style={styles.statusContainer}>
             <Text style={styles.statusText}>{getStatusText()}</Text>
             {usingLocalModel && localModelName && (
-              <Text style={styles.statusSubtext}>Local model: {localModelName}</Text>
+              <Text style={styles.statusSubtext}>
+                Model: {localModelName}
+                {modelEngineType && ` (${modelEngineType === 'litertlm' ? 'LiteRT-LM engine' : 'MediaPipe engine'})`}
+              </Text>
             )}
             {!usingLocalModel && downloadStatus === 'downloading' && (
               <View style={styles.progressBar}>
@@ -358,27 +423,43 @@ export default function App() {
             {localModelError && <Text style={styles.errorText}>{localModelError}</Text>}
           </View>
 
+          {/* Model Selection Section */}
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.button} onPress={handlePickLocalModel}>
-              <Text style={styles.buttonText}>Import Local Model</Text>
+              <Text style={styles.buttonText}>📂 Import Model</Text>
             </TouchableOpacity>
-            {!usingLocalModel && Platform.OS === 'android' && (
-              <TouchableOpacity
-                style={[styles.button, styles.secondaryButton]}
-                onPress={handleLoadExistingLocalModel}
-              >
-                <Text style={styles.buttonText}>Load Existing Local Model</Text>
-              </TouchableOpacity>
-            )}
             {usingLocalModel && (
               <TouchableOpacity
                 style={[styles.button, styles.secondaryButton]}
                 onPress={handleClearLocalModel}
               >
-                <Text style={styles.buttonText}>Use Downloaded Model</Text>
+                <Text style={styles.buttonText}>Use Downloaded</Text>
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Preset Model Buttons (Android only) */}
+          {!usingLocalModel && Platform.OS === 'android' && (
+            <View style={styles.presetSection}>
+              <Text style={styles.presetTitle}>Quick Load Preset Models</Text>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[styles.presetButton, styles.mediapipeButton]}
+                  onPress={handleLoadPresetMediaPipe}
+                >
+                  <Text style={styles.buttonText}>🔧 MediaPipe</Text>
+                  <Text style={styles.presetSubtext}>.task (vision)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.presetButton, styles.litertlmButton]}
+                  onPress={handleLoadPresetLiteRtLm}
+                >
+                  <Text style={styles.buttonText}>🚀 LiteRT-LM</Text>
+                  <Text style={styles.presetSubtext}>.litertlm (audio)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           <View style={styles.buttonRow}>
             {!usingLocalModel && downloadStatus === 'not_downloaded' && (
@@ -667,6 +748,43 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 12,
     textAlign: 'center',
+    marginTop: 4,
+  },
+  // Preset model selection styles
+  presetSection: {
+    backgroundColor: '#1e1e3f',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  presetTitle: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  presetButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  mediapipeButton: {
+    backgroundColor: '#4a90d9',
+  },
+  litertlmButton: {
+    backgroundColor: '#e67e22',
+  },
+  presetSubtext: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
     marginTop: 4,
   },
 });
