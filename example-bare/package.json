@@ -1,0 +1,36 @@
+{
+  "name": "MediaPipeLlmExample",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "clean:android": "cd android && ./gradlew clean && cd ..",
+    "clean:ios": "cd ios && xcodebuild clean && cd .."
+  },
+  "dependencies": {
+    "@react-native-community/audio-toolkit": "^2.0.3",
+    "@react-native-documents/picker": "^10.1.7",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-image-picker": "^8.2.1",
+    "react-native-llm-litert-mediapipe": "file:.."
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.3",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "18.0.0",
+    "@react-native-community/cli-platform-android": "18.0.0",
+    "@react-native-community/cli-platform-ios": "18.0.0",
+    "@react-native/babel-preset": "0.79.6",
+    "@react-native/metro-config": "0.79.6",
+    "@react-native/typescript-config": "0.79.6",
+    "@types/react": "^19.0.0",
+    "typescript": "5.0.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
