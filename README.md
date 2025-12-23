@@ -1,88 +1,234 @@
-<div align="left">
-  <img src="https://img.shields.io/npm/v/react-native-llm-litert-mediapipe.svg?style=flat-square" alt="npm version">
-  <img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS-blue.svg?style=flat-square" alt="Platform support">
-  <img src="https://img.shields.io/badge/Expo-SDK%2050%2B-blue.svg?style=flat-square" alt="Expo SDK">
-  <img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" alt="License">
-</div>
+# react-native-llm-litert-mediapipe
 
-# React Native MediaPipe LLM
+React Native module for on-device LLM inference using Google MediaPipe. Supports Gemma 3n and other MediaPipe-compatible models.
 
-![React Native MediaPipe LLM](./assets/banner.png)
+**No Expo required!** This is a bare React Native package.
 
-React Native MediaPipe LLM is a declarative way to run large language models (LLMs) in React Native on-device, powered by Google’s MediaPipe LLM Inference API 🚀.
+## Features
 
-The MediaPipe LLM Inference API enables running large language models entirely on-device, allowing developers to perform tasks such as generating text, retrieving information in natural language form, and summarizing documents. React Native MediaPipe LLM bridges the gap between React Native and Google’s cutting-edge on-device AI capabilities, enabling developers to integrate state-of-the-art generative AI models into their mobile apps without requiring deep knowledge of native code or machine learning internals.
+- 🚀 On-device LLM inference (no cloud required)
+- 📱 Supports Android (24+) and iOS (14+)
+- 🎨 Multimodal support (images/audio) on Android with Gemma 3n
+- 📥 Built-in model download management
+- ⚡ Streaming response generation
+- 🔧 React hooks for easy integration
 
-## Documentation
-
-Take a look at how our library can help build you your Expo React Native AI features in our docs: \
-[https://AyushWalekar.github.io/react-native-llm-litert-mediapipe/](https://AyushWalekar.github.io/react-native-llm-litert-mediapipe/)
-
-## Quick Start - Running Gemma
-
-### Step 1: Installation
+## Installation
 
 ```bash
-npx expo install react-native-llm-litert-mediapipe
+# npm
+npm install react-native-llm-litert-mediapipe
+
+# yarn
+yarn add react-native-llm-litert-mediapipe
 ```
 
-### Step 2: Setup and init
+### iOS Setup
+
+```bash
+cd ios && pod install
+```
+
+### Android Setup
+
+1. **Update `android/gradle.properties`** - Increase memory for large model builds:
+
+```properties
+org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=4096m
+```
+
+2. **Add OpenCL libraries to `android/app/src/main/AndroidManifest.xml`** (inside `<application>`):
+
+```xml
+<uses-native-library android:name="libOpenCL.so" android:required="false"/>
+<uses-native-library android:name="libOpenCL-car.so" android:required="false"/>
+<uses-native-library android:name="libOpenCL-pixel.so" android:required="false"/>
+```
+
+3. **Register the package** in `MainApplication.kt` (or `.java`):
+
+```kotlin
+// In getPackages()
+import com.mediapipellm.MediaPipeLlmPackage
+
+override fun getPackages(): List<ReactPackage> {
+    val packages = PackageList(this).packages.toMutableList()
+    packages.add(MediaPipeLlmPackage())
+    return packages
+}
+```
+
+## Usage
+
+### Basic Usage with useLLM Hook
 
 ```tsx
 import { useLLM } from 'react-native-llm-litert-mediapipe';
 
-function App() {
-  const llm = useLLM({
-    modelName: 'gemma-1.1-2b-it-int4.bin',
-    modelUrl: 'https://huggingface.co/ayush-walekar/gemma-tflite/resolve/main/gemma-1.1-2b-it-int4.bin',
+function ChatScreen() {
+  const {
+    downloadModel,
+    loadModel,
+    generateStreamingResponse,
+    isLoaded,
+    downloadStatus,
+    downloadProgress,
+  } = useLLM({
+    modelUrl: 'https://your-model-url/gemma-3n-e4b.task',
+    modelName: 'gemma-3n-e4b.task',
     maxTokens: 1024,
-    temperature: 0.7,
     topK: 40,
+    temperature: 0.8,
     randomSeed: 42,
   });
 
-  // ... rest of your app
+  // Download the model first
+  const handleDownload = async () => {
+    await downloadModel({
+      headers: { 'Authorization': 'Bearer YOUR_HF_TOKEN' }, // If needed
+    });
+  };
+
+  // Load after download completes
+  const handleLoad = async () => {
+    await loadModel();
+  };
+
+  // Generate responses
+  const handleGenerate = async (prompt: string) => {
+    let response = '';
+    await generateStreamingResponse(
+      prompt,
+      (partial) => {
+        response += partial;
+        console.log('Partial:', partial);
+      },
+      (error) => console.error('Error:', error)
+    );
+    console.log('Full response:', response);
+  };
+
+  return (
+    // Your UI here
+  );
 }
 ```
 
-### Step 3: Download & Load the model
+### Multimodal Support (Android Only)
+
+Gemma 3n supports image and audio inputs on Android:
 
 ```tsx
-const download = async () => {
-  const model = await llm.downloadModel();
-  console.log('Model downloaded:', model);
-};
+const { addImage, addAudio, generateStreamingResponse, isLoaded } = useLLM({
+  modelUrl: MODEL_URL,
+  modelName: 'gemma-3n-e4b.task',
+  enableVisionModality: true,  // Enable image support
+  enableAudioModality: true,   // Enable audio support (mono WAV)
+  maxNumImages: 10,
+});
 
-const load = async () => {
-  const model = await llm.loadModel();
-  console.log('Model loaded:', model);
-};
+// Add image before generating
+await addImage('/path/to/image.jpg');
+await generateStreamingResponse('What do you see in this image?', onPartial);
+
+// Add audio before generating
+await addAudio('/path/to/audio.wav'); // Must be mono WAV
+await generateStreamingResponse('What was said in this audio?', onPartial);
 ```
 
-### Step 4: Run the model
+### Using ModelManager for Manual Control
 
 ```tsx
-const run = async () => {
-  const result = await llm.generateResponse('How do you plan to escape the interweb?');
-  console.log('Model result:', result);
-};
+import { modelManager, MediaPipeLlm } from 'react-native-llm-litert-mediapipe';
+
+// Register models
+modelManager.registerModel('gemma-3n', 'https://your-url/gemma-3n.task');
+
+// Download
+await modelManager.downloadModel('gemma-3n');
+
+// Create model handle directly
+const handle = await MediaPipeLlm.createModelFromDownloaded(
+  'gemma-3n',
+  1024,  // maxTokens
+  40,    // topK
+  0.8,   // temperature
+  42,    // randomSeed
+  { enableVisionModality: true }
+);
+
+// Generate
+await MediaPipeLlm.generateResponseAsync(handle, requestId, prompt);
+
+// Clean up
+await MediaPipeLlm.releaseModel(handle);
 ```
 
-## Minimum Supported Versions
+## API Reference
 
-- **iOS**: 14+
-- **Android**: SDK 24+
+### useLLM Hook
 
-## Demo
+| Prop | Type | Description |
+|------|------|-------------|
+| `modelUrl` | `string` | URL to download the model from |
+| `modelName` | `string` | Local filename for the model |
+| `maxTokens` | `number` | Maximum tokens to generate (default: 512) |
+| `topK` | `number` | Top-K sampling (default: 40) |
+| `temperature` | `number` | Sampling temperature (default: 0.8) |
+| `randomSeed` | `number` | Random seed for reproducibility |
+| `enableVisionModality` | `boolean` | Enable image input (Android only) |
+| `enableAudioModality` | `boolean` | Enable audio input (Android only) |
+| `maxNumImages` | `number` | Max images per session (default: 10) |
 
-https://github.com/user-attachments/assets/e6073287-59c7-4ead-92ba-2ae98c3ffa97
+### Return Values
 
+| Value | Type | Description |
+|-------|------|-------------|
+| `downloadModel` | `(options?) => Promise<boolean>` | Start model download |
+| `loadModel` | `() => Promise<void>` | Load downloaded model |
+| `generateResponse` | `(prompt, onPartial?, onError?) => Promise<string>` | Generate complete response |
+| `generateStreamingResponse` | `(prompt, onPartial?, onError?) => Promise<void>` | Stream response tokens |
+| `addImage` | `(imagePath) => Promise<boolean>` | Add image to session (Android) |
+| `addAudio` | `(audioPath) => Promise<boolean>` | Add audio to session (Android) |
+| `isLoaded` | `boolean` | Whether model is ready |
+| `downloadStatus` | `string` | Current download status |
+| `downloadProgress` | `number` | Download progress (0-1) |
+| `downloadError` | `string \| null` | Download error message |
 
+## Supported Models
+
+- **Gemma 3n E4B** - Recommended for on-device inference
+- Other MediaPipe LLM-compatible `.task` files
+
+## Platform Requirements
+
+| Platform | Minimum Version | Multimodal Support |
+|----------|-----------------|-------------------|
+| Android | SDK 24 (Android 7.0) | ✅ Full (vision + audio) |
+| iOS | 14.0 | ❌ Text only |
+
+## Troubleshooting
+
+### Android: OutOfMemoryError during build
+
+Increase Gradle memory in `gradle.properties`:
+```properties
+org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=4096m
+```
+
+### iOS: Model not found in bundle
+
+Ensure the model file is added to your Xcode project's "Copy Bundle Resources" build phase.
+
+### Download fails with 401
+
+Add authentication headers:
+```tsx
+await downloadModel({
+  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
+});
+```
 
 ## License
 
-This project is licensed under the [MIT License](./LICENSE).
-
-## Code of Conduct
-
-Please read our [Code of Conduct](./CODE_OF_CONDUCT.md) before contributing.
+MIT

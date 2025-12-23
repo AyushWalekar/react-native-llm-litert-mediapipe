@@ -1,35 +1,44 @@
 {
   "name": "react-native-llm-litert-mediapipe",
-  "version": "0.6.0",
-  "description": "Expo module for Google MediaPipe LLM inference",
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
+  "version": "1.0.0",
+  "description": "React Native module for Google MediaPipe LLM inference (Gemma 3n)",
+  "main": "lib/index-bare.js",
+  "module": "lib/index-bare.js",
+  "types": "lib/index-bare.d.ts",
+  "react-native": "src/index-bare.ts",
+  "source": "src/index-bare.ts",
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "react-native-llm-litert-mediapipe.podspec",
+    "!android/build",
+    "!ios/build",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__"
+  ],
   "scripts": {
-    "build": "expo-module build",
-    "clean": "expo-module clean",
-    "lint": "expo-module lint",
-    "test": "expo-module test",
-    "prepare": "expo-module prepare",
-    "prepublishOnly": "expo-module prepublishOnly",
-    "expo-module": "expo-module",
-    "open:ios": "xed example/ios",
-    "open:android": "open -a \"Android Studio\" example/android"
-  },
-  "expo": {
-    "name": "react-native-llm-litert-mediapipe",
-    "platforms": [
-      "android"
-    ],
-    "plugin": "./app.plugin.js"
+    "build": "tsc --project tsconfig.bare.json",
+    "clean": "rm -rf lib",
+    "lint": "eslint \"src/**/*.{js,ts,tsx}\"",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build",
+    "open:ios": "xed example-bare/ios",
+    "open:android": "open -a \"Android Studio\" example-bare/android"
   },
   "keywords": [
     "react-native",
-    "expo",
-    "react-native-llm-litert-mediapipe",
-    "ExpoLlmMediapipe",
-    "llm",
     "mediapipe",
-    "gemma"
+    "llm",
+    "gemma",
+    "gemma3n",
+    "on-device",
+    "ai",
+    "inference",
+    "android",
+    "ios"
   ],
   "repository": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe",
   "bugs": {
@@ -39,15 +48,19 @@
   "license": "MIT",
   "homepage": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe#readme",
   "devDependencies": {
-    "@types/react": "~18.3.12",
-    "expo": "~52.0.0",
-    "expo-module-scripts": "^4.0.3",
-    "react-native": "0.76.0"
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.79.6",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "expo": "*",
-    "react": "*",
-    "react-native": "*"
+    "react": ">=18.0.0",
+    "react-native": ">=0.70.0"
+  },
+  "codegenConfig": {
+    "name": "MediaPipeLlmSpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
   },
   "platforms": {
     "ios": "14.0",
