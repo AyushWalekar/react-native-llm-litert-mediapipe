@@ -15,6 +15,7 @@ import {
   Platform,
   Alert,
   Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 
 import { useLLM } from 'react-native-llm-litert-mediapipe';
@@ -49,6 +50,7 @@ export default function App() {
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recorder, setRecorder] = useState<Recorder | null>(null);
+  const scrollViewRef = React.useRef<ScrollView>(null);
 
   const downloadableLlm = useLLM({
     modelUrl: MODEL_URL,
@@ -327,155 +329,167 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>MediaPipe LLM Demo</Text>
-        <Text style={styles.subtitle}>Gemma 3n On-Device Inference</Text>
-      </View>
-
-      <View style={styles.statusContainer}>
-        <Text style={styles.statusText}>{getStatusText()}</Text>
-        {usingLocalModel && localModelName && (
-          <Text style={styles.statusSubtext}>Local model: {localModelName}</Text>
-        )}
-        {!usingLocalModel && downloadStatus === 'downloading' && (
-          <View style={styles.progressBar}>
-            <View
-              style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]}
-            />
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>MediaPipe LLM Demo</Text>
+            <Text style={styles.subtitle}>Gemma 3n On-Device Inference</Text>
           </View>
-        )}
-        {localModelError && <Text style={styles.errorText}>{localModelError}</Text>}
-      </View>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.button} onPress={handlePickLocalModel}>
-          <Text style={styles.buttonText}>Import Local Model</Text>
-        </TouchableOpacity>
-        {!usingLocalModel && Platform.OS === 'android' && (
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={handleLoadExistingLocalModel}
-          >
-            <Text style={styles.buttonText}>Load Existing Local Model</Text>
-          </TouchableOpacity>
-        )}
-        {usingLocalModel && (
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={handleClearLocalModel}
-          >
-            <Text style={styles.buttonText}>Use Downloaded Model</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.buttonRow}>
-        {!usingLocalModel && downloadStatus === 'not_downloaded' && (
-          <TouchableOpacity style={styles.button} onPress={handleDownload}>
-            <Text style={styles.buttonText}>Download Model</Text>
-          </TouchableOpacity>
-        )}
-
-        {!usingLocalModel && downloadStatus === 'downloaded' && !isLoaded && (
-          <TouchableOpacity style={styles.button} onPress={handleLoad}>
-            <Text style={styles.buttonText}>Load Model</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {isLoaded && (
-        <>
-          {/* Multimodal Input Section */}
-          {Platform.OS === 'android' && (
-            <View style={styles.multimodalSection}>
-              <Text style={styles.sectionTitle}>Multimodal Input (Optional)</Text>
-              
-              {/* Image Input */}
-              <View style={styles.mediaRow}>
-                <TouchableOpacity 
-                  style={[styles.mediaButton, imageUri && styles.mediaButtonActive]} 
-                  onPress={handlePickImage}
-                >
-                  <Text style={styles.mediaButtonText}>
-                    {imageUri ? '📷 Change Image' : '📷 Add Image'}
-                  </Text>
-                </TouchableOpacity>
-                {imageUri && (
-                  <TouchableOpacity 
-                    style={styles.clearButton} 
-                    onPress={handleClearImage}
-                  >
-                    <Text style={styles.clearButtonText}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              
-              {imageUri && (
-                <Image 
-                  source={{ uri: imageUri }} 
-                  style={styles.imagePreview} 
-                  resizeMode="cover"
-                />
-              )}
-              
-              {/* Audio Input */}
-              <View style={styles.mediaRow}>
-                <TouchableOpacity 
-                  style={[
-                    styles.mediaButton, 
-                    isRecording && styles.recordingButton,
-                    audioUri && styles.mediaButtonActive
-                  ]} 
-                  onPress={isRecording ? handleStopRecording : handleStartRecording}
-                >
-                  <Text style={styles.mediaButtonText}>
-                    {isRecording ? '⏹ Stop Recording' : audioUri ? '🎤 Re-record Audio' : '🎤 Record Audio'}
-                  </Text>
-                </TouchableOpacity>
-                {audioUri && !isRecording && (
-                  <TouchableOpacity 
-                    style={styles.clearButton} 
-                    onPress={handleClearAudio}
-                  >
-                    <Text style={styles.clearButtonText}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              
-              {audioUri && (
-                <Text style={styles.audioInfo}>
-                  Audio recorded: {audioUri.split('/').pop()}
-                </Text>
-              )}
-            </View>
-          )}
-
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your prompt..."
-            placeholderTextColor="#888"
-            value={prompt}
-            onChangeText={setPrompt}
-            multiline
-          />
-
-          <TouchableOpacity
-            style={[styles.button, styles.generateButton, isGenerating && styles.buttonDisabled]}
-            onPress={handleGenerate}
-            disabled={isGenerating || !prompt.trim() || !isLoaded}
-          >
-            {isGenerating ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Generate Response</Text>
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusText}>{getStatusText()}</Text>
+            {usingLocalModel && localModelName && (
+              <Text style={styles.statusSubtext}>Local model: {localModelName}</Text>
             )}
-          </TouchableOpacity>
+            {!usingLocalModel && downloadStatus === 'downloading' && (
+              <View style={styles.progressBar}>
+                <View
+                  style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]}
+                />
+              </View>
+            )}
+            {localModelError && <Text style={styles.errorText}>{localModelError}</Text>}
+          </View>
 
-          <ScrollView style={styles.responseContainer}>
-            <Text style={styles.responseText}>{response || 'Response will appear here...'}</Text>
-          </ScrollView>
-        </>
-      )}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.button} onPress={handlePickLocalModel}>
+              <Text style={styles.buttonText}>Import Local Model</Text>
+            </TouchableOpacity>
+            {!usingLocalModel && Platform.OS === 'android' && (
+              <TouchableOpacity
+                style={[styles.button, styles.secondaryButton]}
+                onPress={handleLoadExistingLocalModel}
+              >
+                <Text style={styles.buttonText}>Load Existing Local Model</Text>
+              </TouchableOpacity>
+            )}
+            {usingLocalModel && (
+              <TouchableOpacity
+                style={[styles.button, styles.secondaryButton]}
+                onPress={handleClearLocalModel}
+              >
+                <Text style={styles.buttonText}>Use Downloaded Model</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.buttonRow}>
+            {!usingLocalModel && downloadStatus === 'not_downloaded' && (
+              <TouchableOpacity style={styles.button} onPress={handleDownload}>
+                <Text style={styles.buttonText}>Download Model</Text>
+              </TouchableOpacity>
+            )}
+
+            {!usingLocalModel && downloadStatus === 'downloaded' && !isLoaded && (
+              <TouchableOpacity style={styles.button} onPress={handleLoad}>
+                <Text style={styles.buttonText}>Load Model</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isLoaded && (
+            <>
+              {/* Multimodal Input Section */}
+              {Platform.OS === 'android' && (
+                <View style={styles.multimodalSection}>
+                  <Text style={styles.sectionTitle}>Multimodal Input (Optional)</Text>
+                  
+                  {/* Image Input */}
+                  <View style={styles.mediaRow}>
+                    <TouchableOpacity 
+                      style={[styles.mediaButton, imageUri && styles.mediaButtonActive]} 
+                      onPress={handlePickImage}
+                    >
+                      <Text style={styles.mediaButtonText}>
+                        {imageUri ? '📷 Change Image' : '📷 Add Image'}
+                      </Text>
+                    </TouchableOpacity>
+                    {imageUri && (
+                      <TouchableOpacity 
+                        style={styles.clearButton} 
+                        onPress={handleClearImage}
+                      >
+                        <Text style={styles.clearButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
+                  {imageUri && (
+                    <Image 
+                      source={{ uri: imageUri }} 
+                      style={styles.imagePreview} 
+                      resizeMode="cover"
+                    />
+                  )}
+                  
+                  {/* Audio Input */}
+                  <View style={styles.mediaRow}>
+                    <TouchableOpacity 
+                      style={[
+                        styles.mediaButton, 
+                        isRecording && styles.recordingButton,
+                        audioUri && styles.mediaButtonActive
+                      ]} 
+                      onPress={isRecording ? handleStopRecording : handleStartRecording}
+                    >
+                      <Text style={styles.mediaButtonText}>
+                        {isRecording ? '⏹ Stop Recording' : audioUri ? '🎤 Re-record Audio' : '🎤 Record Audio'}
+                      </Text>
+                    </TouchableOpacity>
+                    {audioUri && !isRecording && (
+                      <TouchableOpacity 
+                        style={styles.clearButton} 
+                        onPress={handleClearAudio}
+                      >
+                        <Text style={styles.clearButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
+                  {audioUri && (
+                    <Text style={styles.audioInfo}>
+                      Audio recorded: {audioUri.split('/').pop()}
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your prompt..."
+                placeholderTextColor="#888"
+                value={prompt}
+                onChangeText={setPrompt}
+                multiline
+                onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+              />
+
+              <TouchableOpacity
+                style={[styles.button, styles.generateButton, isGenerating && styles.buttonDisabled]}
+                onPress={handleGenerate}
+                disabled={isGenerating || !prompt.trim() || !isLoaded}
+              >
+                {isGenerating ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Generate Response</Text>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.responseContainer}>
+                <Text style={styles.responseText}>{response || 'Response will appear here...'}</Text>
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -484,7 +498,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a2e',
+  },
+  keyboardAvoider: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   header: {
     alignItems: 'center',
@@ -574,11 +594,11 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   responseContainer: {
-    flex: 1,
     backgroundColor: '#252542',
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
+    minHeight: 140,
   },
   responseText: {
     color: '#fff',

@@ -7,6 +7,8 @@ import com.google.mediapipe.tasks.genai.llminference.GraphOptions
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import com.google.mediapipe.tasks.genai.llminference.ProgressListener
+import com.google.mediapipe.tasks.genai.llminference.AudioModelOptions
+
 import java.io.File
 
 class LlmInferenceModel(
@@ -40,6 +42,13 @@ class LlmInferenceModel(
         if (enableVisionModality) {
             inferenceOptionsBuilder.setMaxNumImages(maxNumImages)
         }
+        if (enableAudioModality) {
+            // Configure audio model options if audio modality is enabled
+            val audioModelOptions = AudioModelOptions.builder()
+                // .setSampleRate(16000) // Set sample rate if needed
+                .build()
+            inferenceOptionsBuilder.setAudioModelOptions(audioModelOptions)
+        }
 
         val inferenceOptions = inferenceOptionsBuilder.build()
 
@@ -60,7 +69,7 @@ class LlmInferenceModel(
         if (enableVisionModality || enableAudioModality) {
             val graphOptions = GraphOptions.builder()
                 .setEnableVisionModality(enableVisionModality)
-                // .setEnableAudioModality(enableAudioModality)
+                .setEnableAudioModality(enableAudioModality)
                 .build()
             sessionOptionsBuilder.setGraphOptions(graphOptions)
             inferenceListener?.logging(this, "GraphOptions configured: vision=$enableVisionModality")
