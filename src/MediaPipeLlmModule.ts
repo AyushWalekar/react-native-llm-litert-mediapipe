@@ -393,7 +393,15 @@ function _useLLMBase(props: UseLLMAssetProps | UseLLMFileProps): BaseLlmReturn {
   const [modelHandle, setModelHandle] = React.useState<number | undefined>();
   const nextRequestIdRef = React.useRef(0);
 
-  const { maxTokens, topK, temperature, randomSeed } = props;
+  const {
+    maxTokens,
+    topK,
+    temperature,
+    randomSeed,
+    enableVisionModality,
+    enableAudioModality,
+    maxNumImages,
+  } = props;
   let modelIdentifier: string | undefined;
   let storageType: "asset" | "file" | undefined;
 
@@ -418,6 +426,12 @@ function _useLLMBase(props: UseLLMAssetProps | UseLLMFileProps): BaseLlmReturn {
       `Attempting to create non-downloadable model: ${currentConfigStorageKey}, type: ${currentStorageType}`
     );
 
+    const multimodalOptions = {
+      enableVisionModality,
+      enableAudioModality,
+      maxNumImages,
+    };
+
     let active = true;
     const modelCreatePromise =
       currentStorageType === "asset"
@@ -426,14 +440,16 @@ function _useLLMBase(props: UseLLMAssetProps | UseLLMFileProps): BaseLlmReturn {
             maxTokens ?? 512,
             topK ?? 40,
             temperature ?? 0.8,
-            randomSeed ?? 0
+            randomSeed ?? 0,
+            multimodalOptions
           )
         : MediaPipeLlm.createModel(
             currentConfigStorageKey,
             maxTokens ?? 512,
             topK ?? 40,
             temperature ?? 0.8,
-            randomSeed ?? 0
+            randomSeed ?? 0,
+            multimodalOptions
           );
 
     modelCreatePromise
@@ -465,7 +481,17 @@ function _useLLMBase(props: UseLLMAssetProps | UseLLMFileProps): BaseLlmReturn {
     return () => {
       active = false;
     };
-  }, [modelIdentifier, storageType, maxTokens, topK, temperature, randomSeed]);
+  }, [
+    modelIdentifier,
+    storageType,
+    maxTokens,
+    topK,
+    temperature,
+    randomSeed,
+    enableVisionModality,
+    enableAudioModality,
+    maxNumImages,
+  ]);
 
   React.useEffect(() => {
     const currentModelHandle = modelHandle;

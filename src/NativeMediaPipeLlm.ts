@@ -44,14 +44,16 @@ const MediaPipeLlm: NativeModuleType = {
     maxTokens: number,
     topK: number,
     temperature: number,
-    randomSeed: number
+    randomSeed: number,
+    options?: MultimodalOptions
   ): Promise<number> => {
     return MediaPipeLlmModule.createModel(
       modelPath,
       maxTokens,
       topK,
       temperature,
-      randomSeed
+      randomSeed,
+      options ?? {}
     );
   },
 
@@ -60,14 +62,16 @@ const MediaPipeLlm: NativeModuleType = {
     maxTokens: number,
     topK: number,
     temperature: number,
-    randomSeed: number
+    randomSeed: number,
+    options?: MultimodalOptions
   ): Promise<number> => {
     return MediaPipeLlmModule.createModelFromAsset(
       modelName,
       maxTokens,
       topK,
       temperature,
-      randomSeed
+      randomSeed,
+      options ?? {}
     );
   },
 

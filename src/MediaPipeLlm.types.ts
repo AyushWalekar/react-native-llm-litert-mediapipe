@@ -180,7 +180,8 @@ export interface ExpoLlmMediapipeModule {
     maxTokens: number,
     topK: number,
     temperature: number,
-    randomSeed: number
+    randomSeed: number,
+    options?: MultimodalOptions
   ): Promise<number>;
 
   /**
@@ -191,7 +192,8 @@ export interface ExpoLlmMediapipeModule {
     maxTokens: number,
     topK: number,
     temperature: number,
-    randomSeed: number
+    randomSeed: number,
+    options?: MultimodalOptions
   ): Promise<number>;
 
   releaseModel(handle: number): Promise<boolean>;

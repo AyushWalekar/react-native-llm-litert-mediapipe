@@ -10,9 +10,11 @@
     "clean:ios": "cd ios && xcodebuild clean && cd .."
   },
   "dependencies": {
+    "@react-native-community/audio-toolkit": "^2.0.3",
+    "@react-native-documents/picker": "^10.1.7",
     "react": "19.0.0",
     "react-native": "0.79.6",
-    "@react-native-documents/picker": "^10.1.7",
+    "react-native-image-picker": "^8.2.1",
     "react-native-llm-litert-mediapipe": "file:.."
   },
   "devDependencies": {

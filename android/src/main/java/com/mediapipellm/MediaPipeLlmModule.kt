@@ -190,14 +190,19 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         topK: Int,
         temperature: Double,
         randomSeed: Int,
+        options: ReadableMap?,
         promise: Promise
     ) {
         try {
             val modelHandle = nextHandle++
 
+            val enableVisionModality = if (options?.hasKey("enableVisionModality") == true) options.getBoolean("enableVisionModality") else false
+            val enableAudioModality = if (options?.hasKey("enableAudioModality") == true) options.getBoolean("enableAudioModality") else false
+            val maxNumImages = if (options?.hasKey("maxNumImages") == true) options.getInt("maxNumImages") else 10
+
             sendEvent("logging", mapOf(
                 "handle" to modelHandle,
-                "message" to "Creating model from path: $modelPath"
+                "message" to "Creating model from path: $modelPath (vision=$enableVisionModality, audio=$enableAudioModality)"
             ))
 
             val model = LlmInferenceModel(
@@ -207,6 +212,9 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
                 topK,
                 temperature.toFloat(),
                 randomSeed,
+                enableVisionModality = enableVisionModality,
+                enableAudioModality = enableAudioModality,
+                maxNumImages = maxNumImages,
                 inferenceListener = createInferenceListener(modelHandle)
             )
             modelMap[modelHandle] = model
@@ -226,11 +234,16 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         topK: Int,
         temperature: Double,
         randomSeed: Int,
+        options: ReadableMap?,
         promise: Promise
     ) {
         try {
+            val enableVisionModality = if (options?.hasKey("enableVisionModality") == true) options.getBoolean("enableVisionModality") else false
+            val enableAudioModality = if (options?.hasKey("enableAudioModality") == true) options.getBoolean("enableAudioModality") else false
+            val maxNumImages = if (options?.hasKey("maxNumImages") == true) options.getInt("maxNumImages") else 10
+
             sendEvent("logging", mapOf(
-                "message" to "Creating model from asset: $modelName"
+                "message" to "Creating model from asset: $modelName (vision=$enableVisionModality, audio=$enableAudioModality)"
             ))
 
             val modelPath = copyFileToInternalStorageIfNeeded(modelName, reactApplicationContext).path
@@ -247,6 +260,9 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
                 topK,
                 temperature.toFloat(),
                 randomSeed,
+                enableVisionModality = enableVisionModality,
+                enableAudioModality = enableAudioModality,
+                maxNumImages = maxNumImages,
                 inferenceListener = createInferenceListener(modelHandle)
             )
             modelMap[modelHandle] = model
@@ -511,9 +527,9 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        val enableVisionModality = options?.getBoolean("enableVisionModality") ?: false
-        val enableAudioModality = options?.getBoolean("enableAudioModality") ?: false
-        val maxNumImages = options?.getInt("maxNumImages") ?: 10
+        val enableVisionModality = if (options?.hasKey("enableVisionModality") == true) options.getBoolean("enableVisionModality") else false
+        val enableAudioModality = if (options?.hasKey("enableAudioModality") == true) options.getBoolean("enableAudioModality") else false
+        val maxNumImages = if (options?.hasKey("maxNumImages") == true) options.getInt("maxNumImages") else 10
 
         try {
             val handle = createModelInternal(
