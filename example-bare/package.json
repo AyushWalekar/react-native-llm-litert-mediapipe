@@ -12,6 +12,7 @@
   "dependencies": {
     "react": "19.0.0",
     "react-native": "0.79.6",
+    "@react-native-documents/picker": "^10.1.7",
     "react-native-llm-litert-mediapipe": "file:.."
   },
   "devDependencies": {
