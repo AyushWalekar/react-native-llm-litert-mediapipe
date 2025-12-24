@@ -12,13 +12,22 @@ import kotlinx.coroutines.*
 import java.io.BufferedInputStream
 
 private const val TAG = "MediaPipeLlm"
+
+// Safe ReadableMap extension functions to avoid NoSuchKeyException
+private fun ReadableMap.getBooleanSafe(key: String, default: Boolean = false): Boolean {
+    return if (hasKey(key)) getBoolean(key) else default
+}
+
+private fun ReadableMap.getIntSafe(key: String, default: Int): Int {
+    return if (hasKey(key)) getInt(key) else default
+}
 private const val DOWNLOAD_DIRECTORY = "llm_models"
 
 class MediaPipeLlmModule(reactContext: ReactApplicationContext) : 
     ReactContextBaseJavaModule(reactContext) {
 
     private var nextHandle = 1
-    private val modelMap = mutableMapOf<Int, LlmInferenceModel>()
+    private val engineMap = mutableMapOf<Int, LlmEngine>()
     private val activeDownloads = mutableMapOf<String, Job>()
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -61,14 +70,14 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     // Create inference listener for a model handle
     private fun createInferenceListener(modelHandle: Int): InferenceListener {
         return object : InferenceListener {
-            override fun logging(model: LlmInferenceModel, message: String) {
+            override fun logging(message: String) {
                 sendEvent("logging", mapOf(
                     "handle" to modelHandle,
                     "message" to message
                 ))
             }
 
-            override fun onError(model: LlmInferenceModel, requestId: Int, error: String) {
+            override fun onError(requestId: Int, error: String) {
                 sendEvent("onErrorResponse", mapOf(
                     "handle" to modelHandle,
                     "requestId" to requestId,
@@ -76,7 +85,7 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
                 ))
             }
 
-            override fun onResults(model: LlmInferenceModel, requestId: Int, response: String) {
+            override fun onResults(requestId: Int, response: String) {
                 sendEvent("onPartialResponse", mapOf(
                     "handle" to modelHandle,
                     "requestId" to requestId,
@@ -156,7 +165,38 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         return File(getModelDirectory(), modelName)
     }
 
-    private fun createModelInternal(
+    /**
+     * Determine which engine to use based on file extension.
+     * .litertlm -> LiteRtLmEngine (supports audio)
+     * .task -> MediaPipeLlmEngine (MediaPipe tasks-genai)
+     */
+    private fun isLiteRtLmModel(modelPath: String): Boolean {
+        return modelPath.endsWith(".litertlm", ignoreCase = true)
+    }
+
+    /**
+     * Create the appropriate LLM engine based on model file extension.
+     */
+    private fun createEngine(
+        modelHandle: Int,
+        config: LlmEngineConfig
+    ): LlmEngine {
+        val listener = createInferenceListener(modelHandle)
+        val isLiteRt = isLiteRtLmModel(config.modelPath)
+        
+        sendEvent("logging", mapOf(
+            "handle" to modelHandle,
+            "message" to "Creating ${if (isLiteRt) "LiteRT-LM" else "MediaPipe"} engine for: ${config.modelPath}"
+        ))
+        
+        return if (isLiteRt) {
+            LiteRtLmEngine(reactApplicationContext, config, listener)
+        } else {
+            MediaPipeLlmEngine(reactApplicationContext, config, listener)
+        }
+    }
+
+    private fun createEngineInternal(
         modelPath: String,
         maxTokens: Int,
         topK: Int,
@@ -167,19 +207,20 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         maxNumImages: Int = 10
     ): Int {
         val modelHandle = nextHandle++
-        val model = LlmInferenceModel(
-            reactApplicationContext,
-            modelPath,
-            maxTokens,
-            topK,
-            temperature.toFloat(),
-            randomSeed,
+        
+        val config = LlmEngineConfig(
+            modelPath = modelPath,
+            maxTokens = maxTokens,
+            topK = topK,
+            temperature = temperature.toFloat(),
+            randomSeed = randomSeed,
             enableVisionModality = enableVisionModality,
             enableAudioModality = enableAudioModality,
-            maxNumImages = maxNumImages,
-            inferenceListener = createInferenceListener(modelHandle)
+            maxNumImages = maxNumImages
         )
-        modelMap[modelHandle] = model
+        
+        val engine = createEngine(modelHandle, config)
+        engineMap[modelHandle] = engine
         return modelHandle
     }
 
@@ -194,31 +235,25 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         promise: Promise
     ) {
         try {
-            val modelHandle = nextHandle++
-
-            val enableVisionModality = if (options?.hasKey("enableVisionModality") == true) options.getBoolean("enableVisionModality") else false
-            val enableAudioModality = if (options?.hasKey("enableAudioModality") == true) options.getBoolean("enableAudioModality") else false
-            val maxNumImages = if (options?.hasKey("maxNumImages") == true) options.getInt("maxNumImages") else 10
+            val enableVisionModality = options?.getBooleanSafe("enableVisionModality", false) ?: false
+            val enableAudioModality = options?.getBooleanSafe("enableAudioModality", false) ?: false
+            val maxNumImages = options?.getIntSafe("maxNumImages", 10) ?: 10
 
             sendEvent("logging", mapOf(
-                "handle" to modelHandle,
                 "message" to "Creating model from path: $modelPath (vision=$enableVisionModality, audio=$enableAudioModality)"
             ))
 
-            val model = LlmInferenceModel(
-                reactApplicationContext,
+            val handle = createEngineInternal(
                 modelPath,
                 maxTokens,
                 topK,
-                temperature.toFloat(),
+                temperature,
                 randomSeed,
                 enableVisionModality = enableVisionModality,
                 enableAudioModality = enableAudioModality,
-                maxNumImages = maxNumImages,
-                inferenceListener = createInferenceListener(modelHandle)
+                maxNumImages = maxNumImages
             )
-            modelMap[modelHandle] = model
-            promise.resolve(modelHandle)
+            promise.resolve(handle)
         } catch (e: Exception) {
             sendEvent("logging", mapOf(
                 "message" to "Model creation failed: ${e.message}"
@@ -238,9 +273,9 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         promise: Promise
     ) {
         try {
-            val enableVisionModality = if (options?.hasKey("enableVisionModality") == true) options.getBoolean("enableVisionModality") else false
-            val enableAudioModality = if (options?.hasKey("enableAudioModality") == true) options.getBoolean("enableAudioModality") else false
-            val maxNumImages = if (options?.hasKey("maxNumImages") == true) options.getInt("maxNumImages") else 10
+            val enableVisionModality = options?.getBooleanSafe("enableVisionModality", false) ?: false
+            val enableAudioModality = options?.getBooleanSafe("enableAudioModality", false) ?: false
+            val maxNumImages = options?.getIntSafe("maxNumImages", 10) ?: 10
 
             sendEvent("logging", mapOf(
                 "message" to "Creating model from asset: $modelName (vision=$enableVisionModality, audio=$enableAudioModality)"
@@ -252,21 +287,17 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
                 "message" to "Model file copied to: $modelPath"
             ))
 
-            val modelHandle = nextHandle++
-            val model = LlmInferenceModel(
-                reactApplicationContext,
+            val handle = createEngineInternal(
                 modelPath,
                 maxTokens,
                 topK,
-                temperature.toFloat(),
+                temperature,
                 randomSeed,
                 enableVisionModality = enableVisionModality,
                 enableAudioModality = enableAudioModality,
-                maxNumImages = maxNumImages,
-                inferenceListener = createInferenceListener(modelHandle)
+                maxNumImages = maxNumImages
             )
-            modelMap[modelHandle] = model
-            promise.resolve(modelHandle)
+            promise.resolve(handle)
         } catch (e: Exception) {
             sendEvent("logging", mapOf(
                 "message" to "Model creation from asset failed: ${e.message}"
@@ -278,9 +309,9 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun releaseModel(handle: Int, promise: Promise) {
         try {
-            val model = modelMap.remove(handle)
-            if (model != null) {
-                model.close()
+            val engine = engineMap.remove(handle)
+            if (engine != null) {
+                engine.close()
                 promise.resolve(true)
             } else {
                 promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
@@ -293,8 +324,8 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun generateResponse(handle: Int, requestId: Int, prompt: String, promise: Promise) {
         try {
-            val model = modelMap[handle]
-            if (model == null) {
+            val engine = engineMap[handle]
+            if (engine == null) {
                 promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
                 return
             }
@@ -304,7 +335,7 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
                 "message" to "Generating response with prompt: ${prompt.take(30)}..."
             ))
 
-            val response = model.generateResponse(requestId, prompt)
+            val response = engine.generateResponse(requestId, prompt)
             promise.resolve(response)
         } catch (e: Exception) {
             sendEvent("logging", mapOf(
@@ -318,8 +349,8 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun generateResponseAsync(handle: Int, requestId: Int, prompt: String, promise: Promise) {
         try {
-            val model = modelMap[handle]
-            if (model == null) {
+            val engine = engineMap[handle]
+            if (engine == null) {
                 promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
                 return
             }
@@ -330,7 +361,7 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
                 "message" to "Starting async generation with prompt: ${prompt.take(30)}..."
             ))
 
-            model.generateResponseAsync(requestId, prompt) { result ->
+            engine.generateResponseAsync(requestId, prompt) { result ->
                 try {
                     if (result.isEmpty()) {
                         sendEvent("logging", mapOf(
@@ -527,12 +558,12 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        val enableVisionModality = if (options?.hasKey("enableVisionModality") == true) options.getBoolean("enableVisionModality") else false
-        val enableAudioModality = if (options?.hasKey("enableAudioModality") == true) options.getBoolean("enableAudioModality") else false
-        val maxNumImages = if (options?.hasKey("maxNumImages") == true) options.getInt("maxNumImages") else 10
+        val enableVisionModality = options?.getBooleanSafe("enableVisionModality", false) ?: false
+        val enableAudioModality = options?.getBooleanSafe("enableAudioModality", false) ?: false
+        val maxNumImages = options?.getIntSafe("maxNumImages", 10) ?: 10
 
         try {
-            val handle = createModelInternal(
+            val handle = createEngineInternal(
                 modelFile.absolutePath,
                 maxTokens ?: 1024,
                 topK ?: 40,
@@ -552,13 +583,13 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun addImageToSession(handle: Int, imagePath: String, promise: Promise) {
         try {
-            val model = modelMap[handle]
-            if (model == null) {
+            val engine = engineMap[handle]
+            if (engine == null) {
                 promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
                 return
             }
 
-            model.addImage(imagePath)
+            engine.addImage(imagePath)
             promise.resolve(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding image to session: ${e.message}", e)
@@ -569,13 +600,13 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun addAudioToSession(handle: Int, audioPath: String, promise: Promise) {
         try {
-            val model = modelMap[handle]
-            if (model == null) {
+            val engine = engineMap[handle]
+            if (engine == null) {
                 promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
                 return
             }
 
-            model.addAudio(audioPath)
+            engine.addAudio(audioPath)
             promise.resolve(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding audio to session: ${e.message}", e)
@@ -588,7 +619,7 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         coroutineScope.cancel()
-        modelMap.values.forEach { it.close() }
-        modelMap.clear()
+        engineMap.values.forEach { it.close() }
+        engineMap.clear()
     }
 }
