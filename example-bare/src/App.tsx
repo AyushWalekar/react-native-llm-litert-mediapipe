@@ -28,7 +28,7 @@ import {
   keepLocalCopy,
 } from '@react-native-documents/picker';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
-import { Recorder } from '@react-native-community/audio-toolkit';
+import * as AudioRecorder from './AudioRecorder';
 
 // Gemma 3n E4B model URL (you'll need to provide your own URL or use HuggingFace)
 const MODEL_URL = 'https://huggingface.co/example/gemma-3n-e4b/resolve/main/gemma-3n-e4b.task';
@@ -60,7 +60,7 @@ export default function App() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recorder, setRecorder] = useState<Recorder | null>(null);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const scrollViewRef = React.useRef<ScrollView>(null);
 
   const downloadableLlm = useLLM({
@@ -119,14 +119,14 @@ export default function App() {
   );
   const { generateStreamingResponse, isLoaded, addImage, addAudio } = activeLlm;
 
-  // Cleanup recorder on unmount
+  // Cleanup any active recording on unmount
   useEffect(() => {
     return () => {
-      if (recorder) {
-        recorder.destroy();
+      if (isRecording) {
+        AudioRecorder.cancelRecording().catch(() => {});
       }
     };
-  }, [recorder]);
+  }, [isRecording]);
 
   const handleDownload = useCallback(async () => {
     try {
@@ -263,7 +263,7 @@ export default function App() {
     setImageUri(null);
   }, []);
 
-  // Audio recording handlers
+  // Audio recording handlers using native AudioRecorder (16kHz, mono, PCM16 WAV)
   const handleStartRecording = useCallback(async () => {
     try {
       // Request runtime permission on Android
@@ -284,45 +284,32 @@ export default function App() {
         }
       }
 
-      const newRecorder = new Recorder('recording.wav');
-
-      newRecorder.prepare((err) => {
-        if (err) {
-          console.error('Recorder prepare error:', err);
-          Alert.alert('Recording Error', 'Failed to prepare recorder');
-          return;
-        }
-        newRecorder.record((recErr) => {
-          if (recErr) {
-            console.error('Recorder record error:', recErr);
-            Alert.alert('Recording Error', 'Failed to start recording');
-            return;
-          }
-          setIsRecording(true);
-          setRecorder(newRecorder);
-          setAudioUri(null); // Clear previous audio
-        });
-      });
+      await AudioRecorder.startRecording();
+      setIsRecording(true);
+      setAudioUri(null); // Clear previous audio
+      setAudioDuration(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error('Recording start error:', message);
       Alert.alert('Recording Error', message);
     }
   }, []);
 
   const handleStopRecording = useCallback(async () => {
-    if (!recorder) return;
-
-    recorder.stop((err) => {
-      if (err) {
-        console.error('Recorder stop error:', err);
-      }
-      const recordingPath = recorder.fsPath;
-      setAudioUri(recordingPath);
+    try {
+      const result = await AudioRecorder.stopRecording();
+      console.log('Recording stopped:', result);
+      setAudioUri(result.path);
+      setAudioDuration(result.duration);
       setIsRecording(false);
-      setRecorder(null);
       setResponse(''); // Clear previous response
-    });
-  }, [recorder]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Recording stop error:', message);
+      Alert.alert('Recording Error', message);
+      setIsRecording(false);
+    }
+  }, []);
 
   const handleClearAudio = useCallback(() => {
     setAudioUri(null);
@@ -537,6 +524,7 @@ export default function App() {
                   {audioUri && (
                     <Text style={styles.audioInfo}>
                       Audio recorded: {audioUri.split('/').pop()}
+                      {audioDuration ? ` (${audioDuration.toFixed(1)}s, 16kHz mono)` : ''}
                     </Text>
                   )}
                 </View>
