@@ -34,6 +34,12 @@ interface LlmEngine {
     fun generateResponseAsync(requestId: Int, prompt: String, callback: (String) -> Unit)
     
     /**
+     * Clear the current session/conversation context.
+     * Creates a fresh session while keeping the model loaded.
+     */
+    fun clearSession()
+    
+    /**
      * Release all resources held by this engine.
      */
     fun close()

@@ -614,6 +614,28 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    @ReactMethod
+    fun clearSession(handle: Int, promise: Promise) {
+        try {
+            val engine = engineMap[handle]
+            if (engine == null) {
+                promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
+                return
+            }
+
+            sendEvent("logging", mapOf(
+                "handle" to handle,
+                "message" to "Clearing session for handle $handle"
+            ))
+
+            engine.clearSession()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing session: ${e.message}", e)
+            promise.reject("ERR_CLEAR_SESSION", "Failed to clear session: ${e.message}", e)
+        }
+    }
+
     @Suppress("DEPRECATION")
     @Deprecated("Deprecated in Java", ReplaceWith("Lifecycle management"))
     override fun onCatalystInstanceDestroy() {

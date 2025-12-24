@@ -70,4 +70,8 @@ RCT_EXTERN_METHOD(addAudioToSession : (int)handle audioPath : (NSString *)
                       audioPath resolver : (RCTPromiseResolveBlock)
                           resolve rejecter : (RCTPromiseRejectBlock)reject)
 
+// Session management
+RCT_EXTERN_METHOD(clearSession : (int)handle resolver : (RCTPromiseResolveBlock)
+                      resolve rejecter : (RCTPromiseRejectBlock)reject)
+
 @end

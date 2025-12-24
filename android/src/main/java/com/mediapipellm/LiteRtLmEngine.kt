@@ -157,6 +157,32 @@ class LiteRtLmEngine(
         }
     }
     
+    override fun clearSession() {
+        inferenceListener?.logging("Clearing LiteRT-LM session...")
+        try {
+            // Close current conversation
+            conversation.close()
+            
+            // Create new conversation with same config
+            val conversationConfig = ConversationConfig(
+                samplerConfig = SamplerConfig(
+                    topK = config.topK,
+                    topP = 0.95,
+                    temperature = config.temperature.toDouble()
+                )
+            )
+            conversation = engine.createConversation(conversationConfig)
+            
+            // Clear any pending media
+            clearPendingMedia()
+            
+            inferenceListener?.logging("LiteRT-LM session cleared successfully")
+        } catch (e: Exception) {
+            inferenceListener?.logging("Error clearing session: ${e.message}")
+            throw e
+        }
+    }
+    
     override fun close() {
         try {
             conversation.close()

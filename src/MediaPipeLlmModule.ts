@@ -1,6 +1,11 @@
 /**
  * MediaPipeLlmModule - React hooks and utilities for bare React Native
  * Uses standard NativeModules instead of Expo
+ *
+ * Provides OpenAI-compatible / llama.rn-style API for:
+ * - Chat completion with message arrays
+ * - Multimodal input (images, audio)
+ * - Streaming responses
  */
 import * as React from "react";
 
@@ -16,9 +21,93 @@ import type {
   UseLLMDownloadableProps,
   PartialResponseEventPayload,
   ErrorResponseEventPayload,
+  CompletionOptions,
+  CompletionResult,
+  StreamCallback,
+  ModelInfo,
 } from "./MediaPipeLlm.types";
+import {
+  formatChatMessages,
+  detectTemplate,
+  type FormattedChat,
+} from "./utils/chatFormatter";
 
+// ============================================================================
+// Helper Functions for Chat Completion
+// ============================================================================
+
+/**
+ * Detect model type from path
+ */
+function detectModelType(
+  modelPath: string
+): "mediapipe" | "litertlm" | "unknown" {
+  const lowerPath = modelPath.toLowerCase();
+  if (lowerPath.endsWith(".litertlm")) {
+    return "litertlm";
+  }
+  if (lowerPath.endsWith(".task")) {
+    return "mediapipe";
+  }
+  return "unknown";
+}
+
+/**
+ * Create ModelInfo from model path and options
+ */
+function createModelInfo(
+  modelPath: string,
+  enableVision?: boolean,
+  enableAudio?: boolean
+): ModelInfo {
+  const type = detectModelType(modelPath);
+  const name = modelPath.split("/").pop() || modelPath;
+
+  return {
+    name,
+    type,
+    supportsVision: enableVision ?? false,
+    supportsAudio: enableAudio ?? false,
+  };
+}
+
+/**
+ * Process multimodal content by adding images/audio to session
+ */
+async function addMediaToSession(
+  modelHandle: number,
+  formattedChat: FormattedChat
+): Promise<void> {
+  const { media } = formattedChat;
+
+  // Add images first
+  for (const imagePath of media.images) {
+    // Skip data URLs for now (would need base64 decoding on native side)
+    if (imagePath.startsWith("data:")) {
+      console.warn(
+        "Base64 data URLs for images are not yet supported. Use file:// paths."
+      );
+      continue;
+    }
+    await MediaPipeLlm.addImageToSession(modelHandle, imagePath);
+  }
+
+  // Add audio
+  for (const audioPath of media.audio) {
+    if (audioPath.startsWith("data:")) {
+      console.warn(
+        "Base64 data URLs for audio are not yet supported. Use file:// paths."
+      );
+      continue;
+    }
+    await MediaPipeLlm.addAudioToSession(modelHandle, audioPath);
+  }
+}
+
+// ============================================================================
 // Hook Overloads
+// ============================================================================
+
 export function useLLM(props: UseLLMDownloadableProps): DownloadableLlmReturn;
 export function useLLM(props: UseLLMAssetProps): BaseLlmReturn;
 export function useLLM(props: UseLLMFileProps): BaseLlmReturn;
@@ -33,6 +122,7 @@ export function useLLM(
     return _useLLMBase(props as UseLLMAssetProps | UseLLMFileProps);
   }
 }
+
 
 // Internal implementation for Downloadable models
 function _useLLMDownloadable(
@@ -358,13 +448,152 @@ function _useLLMDownloadable(
     [modelHandle]
   );
 
+  // Model info (memoized)
+  const modelInfo = React.useMemo<ModelInfo | null>(() => {
+    if (!modelName) return null;
+    return createModelInfo(modelName, enableVisionModality, enableAudioModality);
+  }, [modelName, enableVisionModality, enableAudioModality]);
+
+  const getModelInfo = React.useCallback((): ModelInfo | null => {
+    return modelInfo;
+  }, [modelInfo]);
+
+  // Clear context/session
+  const clearContext = React.useCallback(async (): Promise<void> => {
+    if (modelHandle === undefined) {
+      throw new Error("Model is not loaded. Call loadModel() first.");
+    }
+    await MediaPipeLlm.clearSession(modelHandle);
+  }, [modelHandle]);
+
+  // =========================================================================
+  // OpenAI-compatible completion method
+  // =========================================================================
+  const completion = React.useCallback(
+    async (
+      options: CompletionOptions,
+      onToken?: StreamCallback,
+      abortSignal?: AbortSignal
+    ): Promise<CompletionResult> => {
+      if (modelHandle === undefined) {
+        throw new Error("Model is not loaded. Call loadModel() first.");
+      }
+
+      const requestId = nextRequestIdRef.current++;
+
+      // Format messages to prompt and extract multimodal content
+      const template = detectTemplate(modelName);
+      const formattedChat = formatChatMessages(options, template);
+
+      // Add multimodal content to session
+      await addMediaToSession(modelHandle, formattedChat);
+
+      // Track accumulated text for streaming
+      let accumulatedText = "";
+
+      return new Promise<CompletionResult>((resolve, reject) => {
+        const partialSubscription = MediaPipeLlm.addListener(
+          "onPartialResponse",
+          (ev: PartialResponseEventPayload) => {
+            if (
+              ev.handle === modelHandle &&
+              ev.requestId === requestId &&
+              !(abortSignal?.aborted ?? false)
+            ) {
+              accumulatedText += ev.response;
+              if (onToken) {
+                onToken({ token: ev.response, text: accumulatedText });
+              }
+            }
+          }
+        );
+
+        const errorSubscription = MediaPipeLlm.addListener(
+          "onErrorResponse",
+          (ev: ErrorResponseEventPayload) => {
+            if (
+              ev.handle === modelHandle &&
+              ev.requestId === requestId &&
+              !(abortSignal?.aborted ?? false)
+            ) {
+              errorSubscription.remove();
+              partialSubscription.remove();
+              reject(new Error(ev.error));
+            }
+          }
+        );
+
+        if (abortSignal) {
+          abortSignal.addEventListener("abort", () => {
+            errorSubscription.remove();
+            partialSubscription.remove();
+            reject(new Error("Aborted"));
+          });
+        }
+
+        // Use streaming if onToken callback is provided, otherwise sync
+        if (onToken) {
+          MediaPipeLlm.generateResponseAsync(
+            modelHandle,
+            requestId,
+            formattedChat.prompt
+          )
+            .then(() => {
+              if (!(abortSignal?.aborted ?? false)) {
+                errorSubscription.remove();
+                partialSubscription.remove();
+                resolve({
+                  text: accumulatedText,
+                  finishReason: "stop",
+                });
+              }
+            })
+            .catch((error) => {
+              if (!(abortSignal?.aborted ?? false)) {
+                errorSubscription.remove();
+                partialSubscription.remove();
+                reject(error);
+              }
+            });
+        } else {
+          // Synchronous generation
+          MediaPipeLlm.generateResponse(
+            modelHandle,
+            requestId,
+            formattedChat.prompt
+          )
+            .then((result) => {
+              partialSubscription.remove();
+              errorSubscription.remove();
+              resolve({
+                text: result,
+                finishReason: "stop",
+              });
+            })
+            .catch((error) => {
+              partialSubscription.remove();
+              errorSubscription.remove();
+              reject(error);
+            });
+        }
+      });
+    },
+    [modelHandle, modelName]
+  );
+
   return React.useMemo(
     () => ({
+      // OpenAI-compatible API
+      completion,
+      clearContext,
+      getModelInfo,
+      // Legacy API
       generateResponse,
       generateStreamingResponse,
       addImage,
       addAudio,
       isLoaded: modelHandle !== undefined,
+      // Download-specific
       downloadModel: downloadModelHandler,
       loadModel: loadModelHandler,
       downloadStatus,
@@ -373,6 +602,9 @@ function _useLLMDownloadable(
       isCheckingStatus,
     }),
     [
+      completion,
+      clearContext,
+      getModelInfo,
       generateResponse,
       generateStreamingResponse,
       addImage,
@@ -672,8 +904,154 @@ function _useLLMBase(props: UseLLMAssetProps | UseLLMFileProps): BaseLlmReturn {
     [modelHandle]
   );
 
+  // Model info (memoized)
+  const modelInfo = React.useMemo<ModelInfo | null>(() => {
+    if (!modelIdentifier) return null;
+    return createModelInfo(
+      modelIdentifier,
+      enableVisionModality,
+      enableAudioModality
+    );
+  }, [modelIdentifier, enableVisionModality, enableAudioModality]);
+
+  const getModelInfo = React.useCallback((): ModelInfo | null => {
+    return modelInfo;
+  }, [modelInfo]);
+
+  // Clear context/session
+  const clearContext = React.useCallback(async (): Promise<void> => {
+    if (modelHandle === undefined) {
+      throw new Error(
+        "Model handle is not defined. Ensure model is created/loaded."
+      );
+    }
+    await MediaPipeLlm.clearSession(modelHandle);
+  }, [modelHandle]);
+
+  // =========================================================================
+  // OpenAI-compatible completion method
+  // =========================================================================
+  const completion = React.useCallback(
+    async (
+      options: CompletionOptions,
+      onToken?: StreamCallback,
+      abortSignal?: AbortSignal
+    ): Promise<CompletionResult> => {
+      if (modelHandle === undefined) {
+        throw new Error(
+          "Model handle is not defined. Ensure model is created/loaded."
+        );
+      }
+
+      const requestId = nextRequestIdRef.current++;
+
+      // Format messages to prompt and extract multimodal content
+      const template = detectTemplate(modelIdentifier || "");
+      const formattedChat = formatChatMessages(options, template);
+
+      // Add multimodal content to session
+      await addMediaToSession(modelHandle, formattedChat);
+
+      // Track accumulated text for streaming
+      let accumulatedText = "";
+
+      return new Promise<CompletionResult>((resolve, reject) => {
+        const partialSubscription = MediaPipeLlm.addListener(
+          "onPartialResponse",
+          (ev: PartialResponseEventPayload) => {
+            if (
+              ev.handle === modelHandle &&
+              ev.requestId === requestId &&
+              !(abortSignal?.aborted ?? false)
+            ) {
+              accumulatedText += ev.response;
+              if (onToken) {
+                onToken({ token: ev.response, text: accumulatedText });
+              }
+            }
+          }
+        );
+
+        const errorSubscription = MediaPipeLlm.addListener(
+          "onErrorResponse",
+          (ev: ErrorResponseEventPayload) => {
+            if (
+              ev.handle === modelHandle &&
+              ev.requestId === requestId &&
+              !(abortSignal?.aborted ?? false)
+            ) {
+              errorSubscription.remove();
+              partialSubscription.remove();
+              reject(new Error(ev.error));
+            }
+          }
+        );
+
+        if (abortSignal) {
+          abortSignal.addEventListener("abort", () => {
+            errorSubscription.remove();
+            partialSubscription.remove();
+            reject(new Error("Aborted"));
+          });
+        }
+
+        // Use streaming if onToken callback is provided, otherwise sync
+        if (onToken) {
+          MediaPipeLlm.generateResponseAsync(
+            modelHandle,
+            requestId,
+            formattedChat.prompt
+          )
+            .then(() => {
+              if (!(abortSignal?.aborted ?? false)) {
+                errorSubscription.remove();
+                partialSubscription.remove();
+                resolve({
+                  text: accumulatedText,
+                  finishReason: "stop",
+                });
+              }
+            })
+            .catch((error) => {
+              if (!(abortSignal?.aborted ?? false)) {
+                errorSubscription.remove();
+                partialSubscription.remove();
+                reject(error);
+              }
+            });
+        } else {
+          // Synchronous generation
+          MediaPipeLlm.generateResponse(
+            modelHandle,
+            requestId,
+            formattedChat.prompt
+          )
+            .then((result) => {
+              partialSubscription.remove();
+              errorSubscription.remove();
+              resolve({
+                text: result,
+                finishReason: "stop",
+              });
+            })
+            .catch((error) => {
+              partialSubscription.remove();
+              errorSubscription.remove();
+              reject(error);
+            });
+        }
+      });
+    },
+    [modelHandle, modelIdentifier]
+  );
+
   return React.useMemo(
     () => ({
+      // OpenAI-compatible API
+      completion,
+      clearContext,
+      getModelInfo,
+      // Legacy API
       generateResponse,
       generateStreamingResponse,
       addImage,
@@ -681,6 +1059,9 @@ function _useLLMBase(props: UseLLMAssetProps | UseLLMFileProps): BaseLlmReturn {
       isLoaded: modelHandle !== undefined,
     }),
     [
+      completion,
+      clearContext,
+      getModelInfo,
       generateResponse,
       generateStreamingResponse,
       addImage,
