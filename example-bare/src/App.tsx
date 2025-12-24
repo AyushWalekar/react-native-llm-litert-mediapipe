@@ -28,7 +28,7 @@ import {
   keepLocalCopy,
 } from '@react-native-documents/picker';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
-import * as AudioRecorder from './AudioRecorder';
+import * as AudioRecorder from './AudioRecorderJS';
 
 // Gemma 3n E4B model URL (you'll need to provide your own URL or use HuggingFace)
 const MODEL_URL = 'https://huggingface.co/example/gemma-3n-e4b/resolve/main/gemma-3n-e4b.task';
