@@ -9,7 +9,7 @@
  *
  * No custom native modules required - uses standard RN libraries.
  */
-import { Platform } from 'react-native';
+import {Platform} from 'react-native';
 import LiveAudioStream from 'react-native-live-audio-stream';
 import RNFS from 'react-native-fs';
 
@@ -59,7 +59,7 @@ function initializeStream() {
     if (amplitudeCallback) {
       const amplitude = calculateAmplitudeFromBase64(base64Data);
       const duration = (Date.now() - recordingStartTime) / 1000;
-      amplitudeCallback({ amplitude, duration });
+      amplitudeCallback({amplitude, duration});
 
       // Auto-stop at max duration
       if (duration >= MAX_DURATION_SECONDS) {
@@ -105,8 +105,8 @@ function calculateAmplitudeFromBase64(base64Data: string): number {
 function createWavHeader(pcmDataLength: number): Uint8Array {
   const header = new Uint8Array(44);
   const wavFileSize = pcmDataLength + 44;
-  const byteRate = SAMPLE_RATE * CHANNELS * BITS_PER_SAMPLE / 8;
-  const blockAlign = CHANNELS * BITS_PER_SAMPLE / 8;
+  const byteRate = (SAMPLE_RATE * CHANNELS * BITS_PER_SAMPLE) / 8;
+  const blockAlign = (CHANNELS * BITS_PER_SAMPLE) / 8;
 
   // RIFF chunk descriptor
   header[0] = 'R'.charCodeAt(0);
@@ -278,9 +278,14 @@ export async function stopRecording(): Promise<AudioRecordingResult> {
   const base64Data = uint8ArrayToBase64(wavData);
   await RNFS.writeFile(filePath, base64Data, 'base64');
 
-  const duration = pcmData.length / (SAMPLE_RATE * CHANNELS * (BITS_PER_SAMPLE / 8));
+  const duration =
+    pcmData.length / (SAMPLE_RATE * CHANNELS * (BITS_PER_SAMPLE / 8));
 
-  console.log(`AudioRecorder: Saved ${filePath} (${wavData.length} bytes, ${duration.toFixed(1)}s)`);
+  console.log(
+    `AudioRecorder: Saved ${filePath} (${
+      wavData.length
+    } bytes, ${duration.toFixed(1)}s)`,
+  );
 
   return {
     path: filePath,
@@ -319,7 +324,7 @@ export async function isRecording(): Promise<boolean> {
  * Useful for showing audio level visualization.
  */
 export function onAmplitudeUpdate(
-  callback: (event: AudioAmplitudeEvent) => void
+  callback: (event: AudioAmplitudeEvent) => void,
 ): () => void {
   amplitudeCallback = callback;
   return () => {
