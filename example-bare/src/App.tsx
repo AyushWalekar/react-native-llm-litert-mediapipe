@@ -1,6 +1,6 @@
 /**
  * Example app demonstrating react-native-llm-litert-mediapipe usage
- * with OpenAI-compatible chat completion API and multimodal (image/audio) input
+ * with a downloadable Gemma 3n model and multimodal (image/audio) input
  */
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
@@ -20,7 +20,6 @@ import {
 } from 'react-native';
 
 import { useLLM } from 'react-native-llm-litert-mediapipe';
-import type { ChatMessage, ModelInfo } from 'react-native-llm-litert-mediapipe';
 import {
   pick,
   types as documentTypes,
@@ -56,10 +55,6 @@ export default function App() {
   const [localModelName, setLocalModelName] = useState<string | null>(null);
   const [localModelError, setLocalModelError] = useState<string | null>(null);
   const [modelEngineType, setModelEngineType] = useState<'mediapipe' | 'litertlm' | null>(null);
-  
-  // Conversation history state (OpenAI-compatible)
-  const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   
   // Multimodal state
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -122,16 +117,7 @@ export default function App() {
     () => (usingLocalModel ? localLlm : downloadableLlm),
     [usingLocalModel, localLlm, downloadableLlm]
   );
-  const { 
-    generateStreamingResponse, 
-    isLoaded, 
-    addImage, 
-    addAudio,
-    // New OpenAI-compatible API
-    completion,
-    clearContext,
-    getModelInfo,
-  } = activeLlm;
+  const { generateStreamingResponse, isLoaded, addImage, addAudio } = activeLlm;
 
   // Cleanup any active recording on unmount
   useEffect(() => {
@@ -329,127 +315,7 @@ export default function App() {
     setAudioUri(null);
   }, []);
 
-  // Clear conversation context
-  const handleClearConversation = useCallback(async () => {
-    setConversationHistory([]);
-    setResponse('');
-    if (isLoaded && clearContext) {
-      try {
-        await clearContext();
-        console.log('Context cleared successfully');
-      } catch (error) {
-        console.error('Error clearing context:', error);
-      }
-    }
-  }, [isLoaded, clearContext]);
-
-  // Build multimodal message content
-  const buildMessageContent = useCallback((): ChatMessage['content'] => {
-    const parts: (import('react-native-llm-litert-mediapipe').TextContentPart | 
-                  import('react-native-llm-litert-mediapipe').ImageContentPart | 
-                  import('react-native-llm-litert-mediapipe').AudioContentPart)[] = [];
-    
-    // Add text content
-    if (prompt.trim()) {
-      parts.push({ type: 'text', text: prompt.trim() });
-    }
-    
-    // Add image if selected
-    if (imageUri) {
-      const imagePath = imageUri.startsWith('file://') 
-        ? imageUri 
-        : `file://${imageUri}`;
-      parts.push({ 
-        type: 'image_url', 
-        image_url: { url: imagePath } 
-      });
-    }
-    
-    // Add audio if recorded
-    if (audioUri) {
-      const audioPath = audioUri.startsWith('file://') 
-        ? audioUri 
-        : `file://${audioUri}`;
-      parts.push({ 
-        type: 'input_audio', 
-        input_audio: { url: audioPath, format: 'wav' } 
-      });
-    }
-    
-    // If only text, return as string for simplicity
-    if (parts.length === 1 && parts[0].type === 'text') {
-      return prompt.trim();
-    }
-    
-    return parts;
-  }, [prompt, imageUri, audioUri]);
-
-  // Generate using the new OpenAI-compatible completion API
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || !isLoaded) return;
-
-    // iOS doesn't support multimodal yet
-    if (Platform.OS === 'ios' && (imageUri || audioUri)) {
-      Alert.alert('Not Supported', 'iOS does not support multimodal input yet.');
-      return;
-    }
-
-    setIsGenerating(true);
-    setResponse('');
-
-    try {
-      // Build the user message with multimodal content
-      const userMessage: ChatMessage = {
-        role: 'user',
-        content: buildMessageContent(),
-      };
-      
-      // Build messages array including history
-      const messages: ChatMessage[] = [
-        // Optional system message
-        { role: 'system', content: 'You are a helpful, friendly AI assistant.' },
-        // Previous conversation history
-        ...conversationHistory,
-        // Current user message
-        userMessage,
-      ];
-
-      console.log('Sending messages:', JSON.stringify(messages, null, 2));
-
-      // Use the new completion API with streaming
-      const result = await completion(
-        { messages },
-        // Streaming callback
-        (data) => {
-          setResponse(data.text);
-        }
-      );
-
-      // Update conversation history with user message and assistant response
-      setConversationHistory(prev => [
-        ...prev,
-        // Store user message (text only for history)
-        { role: 'user' as const, content: prompt.trim() },
-        // Store assistant response
-        { role: 'assistant' as const, content: result.text },
-      ]);
-
-      // Clear multimodal inputs after successful generation
-      setImageUri(null);
-      setAudioUri(null);
-      setAudioDuration(null);
-
-      console.log('Generation complete:', result.finishReason);
-    } catch (error) {
-      console.error('Generate error:', error);
-      Alert.alert('Generation Error', error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [prompt, isLoaded, completion, imageUri, audioUri, buildMessageContent, conversationHistory]);
-
-  // Legacy generate handler using the old API (fallback)
-  const handleGenerateLegacy = useCallback(async () => {
     if (!prompt.trim() || !isLoaded) return;
 
     // iOS doesn't support multimodal yet
@@ -493,14 +359,6 @@ export default function App() {
       setIsGenerating(false);
     }
   }, [prompt, isLoaded, generateStreamingResponse, imageUri, audioUri, addImage, addAudio]);
-
-  // Get model info
-  const modelInfoData = useMemo<ModelInfo | null>(() => {
-    if (isLoaded && getModelInfo) {
-      return getModelInfo();
-    }
-    return null;
-  }, [isLoaded, getModelInfo]);
 
   const getStatusText = () => {
     if (usingLocalModel) {
@@ -671,72 +529,6 @@ export default function App() {
                   )}
                 </View>
               )}
-
-              {/* Model Info & Conversation Controls */}
-              <View style={styles.controlsSection}>
-                {/* Model capabilities info */}
-                {modelInfoData && (
-                  <View style={styles.modelInfoRow}>
-                    <Text style={styles.modelInfoText}>
-                      📦 {modelInfoData.name}
-                    </Text>
-                    <Text style={styles.modelInfoCapabilities}>
-                      {modelInfoData.supportsVision ? '👁️ Vision' : ''}
-                      {modelInfoData.supportsVision && modelInfoData.supportsAudio ? ' • ' : ''}
-                      {modelInfoData.supportsAudio ? '🎵 Audio' : ''}
-                    </Text>
-                  </View>
-                )}
-                
-                {/* Conversation controls */}
-                <View style={styles.conversationControls}>
-                  <Text style={styles.historyBadge}>
-                    💬 {Math.floor(conversationHistory.length / 2)} turns
-                  </Text>
-                  <TouchableOpacity 
-                    style={styles.clearConversationButton}
-                    onPress={handleClearConversation}
-                    disabled={conversationHistory.length === 0}
-                  >
-                    <Text style={[
-                      styles.clearConversationText,
-                      conversationHistory.length === 0 && styles.disabledText
-                    ]}>
-                      🗑️ Clear Chat
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.historyToggle}
-                    onPress={() => setShowHistory(!showHistory)}
-                  >
-                    <Text style={styles.historyToggleText}>
-                      {showHistory ? '▼ Hide' : '▶ History'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Conversation history display */}
-                {showHistory && conversationHistory.length > 0 && (
-                  <View style={styles.historyContainer}>
-                    {conversationHistory.map((msg, idx) => (
-                      <View 
-                        key={idx} 
-                        style={[
-                          styles.historyMessage,
-                          msg.role === 'user' ? styles.userMessage : styles.assistantMessage
-                        ]}
-                      >
-                        <Text style={styles.historyRole}>
-                          {msg.role === 'user' ? '👤 You' : '🤖 Assistant'}
-                        </Text>
-                        <Text style={styles.historyContent} numberOfLines={3}>
-                          {typeof msg.content === 'string' ? msg.content : '[Multimodal]'}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
 
               <TextInput
                 style={styles.input}
@@ -982,93 +774,5 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
     fontSize: 11,
     marginTop: 4,
-  },
-  // Controls section styles
-  controlsSection: {
-    backgroundColor: '#252542',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  modelInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#3b3b5c',
-  },
-  modelInfoText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  modelInfoCapabilities: {
-    color: '#aaa',
-    fontSize: 12,
-  },
-  conversationControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyBadge: {
-    color: '#aaa',
-    fontSize: 12,
-  },
-  clearConversationButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#3b3b5c',
-  },
-  clearConversationText: {
-    color: '#ff8a8a',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  historyToggle: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  historyToggleText: {
-    color: '#6C63FF',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  disabledText: {
-    color: '#666',
-  },
-  historyContainer: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#3b3b5c',
-    maxHeight: 200,
-  },
-  historyMessage: {
-    padding: 8,
-    marginBottom: 6,
-    borderRadius: 8,
-  },
-  userMessage: {
-    backgroundColor: '#3b3b5c',
-    alignSelf: 'flex-end',
-    marginLeft: 30,
-  },
-  assistantMessage: {
-    backgroundColor: '#1e1e3f',
-    alignSelf: 'flex-start',
-    marginRight: 30,
-  },
-  historyRole: {
-    color: '#888',
-    fontSize: 10,
-    marginBottom: 2,
-  },
-  historyContent: {
-    color: '#fff',
-    fontSize: 12,
   },
 });

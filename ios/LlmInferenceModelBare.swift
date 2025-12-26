@@ -17,23 +17,22 @@ class LlmInferenceModelBare {
     private var inference: LlmInference
     private var session: LlmInference.Session?
 
-    // Model configuration (exposed for session recreation)
-    let modelPath: String
-    let maxTokens: Int
-    let topK: Int
-    let temperature: Float
-    let randomSeed: Int
-    
+    // Model configuration
+    private let maxTokens: Int
     private let modelHandle: Int
     private let eventEmitter: (String, [String: Any]) -> Void
     private var currentResponse: String = ""
+
+    // Store parameters for later use in session creation
+    private let temperature: Float
+    private let topK: Int
+    private let randomSeed: Int
 
     init(
         modelPath: String, maxTokens: Int, topK: Int, temperature: Float, randomSeed: Int,
         eventEmitter: @escaping (String, [String: Any]) -> Void, modelHandle: Int
     ) throws {
 
-        self.modelPath = modelPath
         self.maxTokens = maxTokens
         self.eventEmitter = eventEmitter
         self.modelHandle = modelHandle

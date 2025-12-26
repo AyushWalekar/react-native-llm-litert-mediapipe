@@ -433,38 +433,4 @@ class MediaPipeLlm: RCTEventEmitter {
             "Multimodal audio input is not supported on iOS. This feature is only available on Android.",
             nil)
     }
-
-    // MARK: - Session Management
-
-    @objc(clearSession:resolver:rejecter:)
-    func clearSession(
-        _ handle: Int,
-        resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock
-    ) {
-        guard let model = modelMap[handle] else {
-            reject("INVALID_HANDLE", "No model found for handle \(handle)", nil)
-            return
-        }
-        
-        // For iOS, we recreate the model to clear the session
-        // This is a workaround since MediaPipe iOS doesn't have explicit session clearing
-        do {
-            // Get original config from existing model
-            let newModel = try LlmInferenceModelBare(
-                modelPath: model.modelPath,
-                maxTokens: model.maxTokens,
-                topK: model.topK,
-                temperature: model.temperature,
-                randomSeed: model.randomSeed,
-                eventEmitter: { [weak self] eventName, params in
-                    self?.emitEvent(eventName, params)
-                },
-                modelHandle: handle
-            )
-            modelMap[handle] = newModel
-            resolve(true)
-        } catch {
-            reject("CLEAR_SESSION_ERROR", "Failed to clear session: \(error.localizedDescription)", error)
-        }
-    }
 }

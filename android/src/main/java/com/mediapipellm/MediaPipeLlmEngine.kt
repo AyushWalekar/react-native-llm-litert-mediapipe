@@ -22,7 +22,7 @@ class MediaPipeLlmEngine(
 ) : LlmEngine {
     
     private val llmInference: LlmInference
-    private var llmInferenceSession: LlmInferenceSession
+    private val llmInferenceSession: LlmInferenceSession
     
     // For tracking current request
     private var requestResult: String = ""
@@ -159,35 +159,6 @@ class MediaPipeLlmEngine(
         } catch (e: Exception) {
             inferenceListener?.onError(requestId, e.message ?: "Unknown error")
             callback("")
-        }
-    }
-    
-    override fun clearSession() {
-        inferenceListener?.logging("Clearing MediaPipe session...")
-        try {
-            // Close current session
-            llmInferenceSession.close()
-            
-            // Create new session with same options
-            val sessionOptionsBuilder = LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                .setTemperature(config.temperature)
-                .setTopK(config.topK)
-            
-            if (config.enableVisionModality || config.enableAudioModality) {
-                val graphOptions = GraphOptions.builder()
-                    .setEnableVisionModality(config.enableVisionModality)
-                    .setEnableAudioModality(config.enableAudioModality)
-                    .build()
-                sessionOptionsBuilder.setGraphOptions(graphOptions)
-            }
-            
-            val sessionOptions = sessionOptionsBuilder.build()
-            llmInferenceSession = LlmInferenceSession.createFromOptions(llmInference, sessionOptions)
-            
-            inferenceListener?.logging("MediaPipe session cleared successfully")
-        } catch (e: Exception) {
-            inferenceListener?.logging("Error clearing session: ${e.message}")
-            throw e
         }
     }
     

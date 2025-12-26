@@ -1,7 +1,7 @@
 {
   "name": "react-native-llm-litert-mediapipe",
-  "version": "0.1.0",
-  "description": "React Native module for on-device LLM inference using Google MediaPipe and LiteRT-LM. Supports Gemma 3n with OpenAI-compatible chat API and multimodal input (images, audio).",
+  "version": "1.0.0",
+  "description": "React Native module for Google MediaPipe LLM inference (Gemma 3n)",
   "main": "lib/index-bare.js",
   "module": "lib/index-bare.js",
   "types": "lib/index-bare.d.ts",
@@ -38,31 +38,15 @@
     "ai",
     "inference",
     "android",
-    "ios",
-    "multimodal",
-    "vision",
-    "audio",
-    "litertlm",
-    "openai",
-    "chat",
-    "llama"
+    "ios"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe"
-  },
+  "repository": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe",
   "bugs": {
     "url": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe/issues"
   },
   "author": "Ayush Walekar <walekarayush@gmail.com> (https://github.com/AyushWalekar)",
   "license": "MIT",
   "homepage": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe#readme",
-  "publishConfig": {
-    "access": "public"
-  },
-  "engines": {
-    "node": ">=18"
-  },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
