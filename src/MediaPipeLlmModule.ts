@@ -5,7 +5,15 @@
 import * as React from "react";
 
 import MediaPipeLlm from "./NativeMediaPipeLlm";
-import type {
+import {
+  loadModel,
+  loadModelFromAsset,
+  releaseModel,
+  generateText,
+  streamText,
+  stopGeneration,
+} from "./LlmApi";
+import {
   DownloadOptions,
   DownloadProgressEvent,
   UseLLMProps,
@@ -17,6 +25,7 @@ import type {
   PartialResponseEventPayload,
   ErrorResponseEventPayload,
 } from "./MediaPipeLlm.types";
+import type { LLMModel, ModelMessage, GenerationOptions, LoadModelConfig } from "./LlmApi.types";
 
 // Hook Overloads
 export function useLLM(props: UseLLMDownloadableProps): DownloadableLlmReturn;
@@ -786,3 +795,103 @@ export function generateStreamingText(
 }
 
 export default MediaPipeLlm;
+
+/**
+ * React hook for using the standardized LLM API
+ * Compatible with AI SDK's ModelMessage format
+ */
+export function useStandardLLM(
+  config:
+    | { type: "file"; path: string; config?: LoadModelConfig }
+    | { type: "asset"; name: string; config?: LoadModelConfig }
+) {
+  const [model, setModel] = React.useState<LLMModel | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = React.useState(false);
+
+  const loadModelInternal = React.useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      let loadedModel: LLMModel;
+      if (config.type === "file") {
+        loadedModel = await loadModel(config.path, config.config ?? {});
+      } else {
+        loadedModel = await loadModelFromAsset(config.name, config.config ?? {});
+      }
+      setModel(loadedModel);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [config]);
+
+  const unloadModel = React.useCallback(async () => {
+    if (model) {
+      await releaseModel(model);
+      setModel(null);
+    }
+  }, [model]);
+
+  const generate = React.useCallback(
+    async (messages: ModelMessage[], options?: GenerationOptions) => {
+      if (!model) {
+        throw new Error("Model not loaded");
+      }
+      setIsGenerating(true);
+      try {
+        const result = await generateText(model, messages, options);
+        return result;
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    [model]
+  );
+
+  const stream = React.useCallback(
+    async (messages: ModelMessage[], options?: GenerationOptions) => {
+      if (!model) {
+        throw new Error("Model not loaded");
+      }
+      setIsGenerating(true);
+      try {
+        const result = await streamText(model, messages, options);
+        return result;
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    [model]
+  );
+
+  const cancel = React.useCallback(async () => {
+    if (model) {
+      await stopGeneration(model);
+      setIsGenerating(false);
+    }
+  }, [model]);
+
+  React.useEffect(() => {
+    return () => {
+      if (model) {
+        releaseModel(model).catch((e) => console.error("Failed to release model:", e));
+      }
+    };
+  }, [model]);
+
+  return {
+    model,
+    isLoaded: model !== null && !isLoading,
+    isLoading,
+    isGenerating,
+    error,
+    loadModel: loadModelInternal,
+    unloadModel,
+    generate,
+    stream,
+    cancel,
+  };
+}

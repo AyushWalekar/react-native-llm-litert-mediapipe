@@ -32,7 +32,12 @@ interface LlmEngine {
      * @param callback Called when generation is complete with the full response
      */
     fun generateResponseAsync(requestId: Int, prompt: String, callback: (String) -> Unit)
-    
+
+    /**
+     * Cancel the current ongoing generation.
+     */
+    fun cancelGeneration()
+
     /**
      * Release all resources held by this engine.
      */

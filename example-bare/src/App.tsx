@@ -1,6 +1,7 @@
 /**
  * Example app demonstrating react-native-llm-litert-mediapipe usage
  * with a downloadable Gemma 3n model and multimodal (image/audio) input
+ * Demonstrates BOTH legacy API and new standardized API
  */
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
