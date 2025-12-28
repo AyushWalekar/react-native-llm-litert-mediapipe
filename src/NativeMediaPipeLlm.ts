@@ -148,6 +148,10 @@ const MediaPipeLlm: NativeModuleType = {
     return MediaPipeLlmModule.addAudioToSession(handle, audioPath);
   },
 
+  stopGeneration: (handle: number): Promise<boolean> => {
+    return MediaPipeLlmModule.stopGeneration(handle);
+  },
+
   // Event methods - adapted to use NativeEventEmitter
   addListener: <EventName extends keyof ExpoLlmMediapipeModuleEvents>(
     eventName: EventName,

@@ -614,6 +614,23 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    @ReactMethod
+    fun stopGeneration(handle: Int, promise: Promise) {
+        try {
+            val engine = engineMap[handle]
+            if (engine == null) {
+                promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
+                return
+            }
+
+            engine.cancelGeneration()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping generation: ${e.message}", e)
+            promise.reject("ERR_STOP_GENERATION", "Failed to stop generation: ${e.message}", e)
+        }
+    }
+
     @Suppress("DEPRECATION")
     @Deprecated("Deprecated in Java", ReplaceWith("Lifecycle management"))
     override fun onCatalystInstanceDestroy() {

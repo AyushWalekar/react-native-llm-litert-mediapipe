@@ -56,3 +56,5 @@ yarn-error.log
 # Expo
 .expo/*
 .env
+
+lib/

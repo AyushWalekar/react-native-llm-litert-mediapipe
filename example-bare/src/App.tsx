@@ -1,6 +1,7 @@
 /**
  * Example app demonstrating react-native-llm-litert-mediapipe usage
  * with a downloadable Gemma 3n model and multimodal (image/audio) input
+ * Demonstrates BOTH legacy API and new standardized API
  */
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
@@ -29,19 +30,20 @@ import {
 } from '@react-native-documents/picker';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import * as AudioRecorder from './AudioRecorderJS';
+import RNFS from 'react-native-fs';
 
 // Gemma 3n E4B model URL (you'll need to provide your own URL or use HuggingFace)
 const MODEL_URL = 'https://huggingface.co/example/gemma-3n-e4b/resolve/main/gemma-3n-e4b.task';
 const MODEL_NAME = 'gemma-3n-e4b.task';
 
-// Preset local model paths (Android) for quick testing
+// Preset local model paths (Android) - dynamically constructed to work on both emulator and device
 // MediaPipe .task model (vision support, limited audio)
 const PRESET_MEDIAPIPE_MODEL_PATH =
-  '/data/user/0/com.mediapipellmexample/files/16f676c9-6155-462a-a8bf-59247fc4c07b/gemma-3n-E4B-it-int4.task';
+  `${RNFS.DocumentDirectoryPath}/16f676c9-6155-462a-a8bf-59247fc4c07b/gemma-3n-E4B-it-int4.task`;
 
 // LiteRT-LM .litertlm model (full audio support)
 const PRESET_LITERTLM_MODEL_PATH =
-  '/data/user/0/com.mediapipellmexample/files/litert/gemma-3n-E4B-it-int4.litertlm';
+  `${RNFS.DocumentDirectoryPath}/litert/gemma-3n-E4B-it-int4.litertlm`;
 
 // Detect model type from path
 const isLiteRtLmModel = (path: string) => path.toLowerCase().endsWith('.litertlm');
@@ -213,6 +215,9 @@ export default function App() {
       return;
     }
 
+    console.log('Loading preset MediaPipe model from:', PRESET_MEDIAPIPE_MODEL_PATH);
+    // Set engine type FIRST to avoid double-load (both states update in same batch)
+    setModelEngineType('mediapipe');
     setLocalModelPath(PRESET_MEDIAPIPE_MODEL_PATH);
     setLocalModelName(PRESET_MEDIAPIPE_MODEL_PATH.split('/').pop() ?? 'model');
   }, []);
@@ -226,6 +231,9 @@ export default function App() {
       return;
     }
 
+    console.log('Loading preset LiteRT-LM model from:', PRESET_LITERTLM_MODEL_PATH);
+    // Set engine type FIRST to avoid double-load (both states update in same batch)
+    setModelEngineType('litertlm');
     setLocalModelPath(PRESET_LITERTLM_MODEL_PATH);
     setLocalModelName(PRESET_LITERTLM_MODEL_PATH.split('/').pop() ?? 'model');
   }, []);

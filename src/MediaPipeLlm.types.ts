@@ -268,6 +268,11 @@ export interface ExpoLlmMediapipeModule {
   addAudioToSession(handle: number, audioPath: string): Promise<boolean>;
 
   /**
+   * Stop ongoing generation for a model
+   */
+  stopGeneration(handle: number): Promise<boolean>;
+
+  /**
    * Adds a listener for a specific event.
    */
   addListener<EventName extends keyof ExpoLlmMediapipeModuleEvents>(

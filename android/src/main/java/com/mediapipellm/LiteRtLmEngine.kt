@@ -12,6 +12,11 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -24,16 +29,22 @@ class LiteRtLmEngine(
     private val config: LlmEngineConfig,
     private val inferenceListener: InferenceListener? = null
 ) : LlmEngine {
-    
+
     private val engine: Engine
     private var conversation: Conversation
-    
+
+    // Coroutine scope for async operations
+    private val coroutineScope = CoroutineScope(Dispatchers.Main)
+
     // Pending multimodal content for next message
     private val pendingImages = mutableListOf<ByteArray>()
     private val pendingAudio = mutableListOf<ByteArray>()
-    
+
     // For tracking current request
     private var requestResult: String = ""
+
+    // Job reference for cancellation
+    private var currentJob: Job? = null
     
     init {
         inferenceListener?.logging("Init LiteRtLmEngine: vision=${config.enableVisionModality}, audio=${config.enableAudioModality}")
@@ -126,50 +137,68 @@ class LiteRtLmEngine(
     
     override fun generateResponseAsync(requestId: Int, prompt: String, callback: (String) -> Unit) {
         requestResult = ""
-        
-        try {
-            val message = buildMessage(prompt)
-            
-            // Clear pending media after building message
-            clearPendingMedia()
-            
-            val messageCallback = object : MessageCallback {
-                override fun onMessage(message: Message) {
-                    val partialResult = message.toString()
-                    requestResult += partialResult
-                    inferenceListener?.onResults(requestId, partialResult)
+        currentJob = coroutineScope.launch {
+            try {
+                val message = buildMessage(prompt)
+
+                // Clear pending media after building message
+                clearPendingMedia()
+
+                val messageCallback = object : MessageCallback {
+                    override fun onMessage(message: Message) {
+                        val partialResult = message.toString()
+                        requestResult += partialResult
+                        inferenceListener?.onResults(requestId, partialResult)
+                    }
+
+                    override fun onDone() {
+                        callback(requestResult)
+                    }
+
+                    override fun onError(throwable: Throwable) {
+                        if (!isActive) {
+                            inferenceListener?.logging("Generation was cancelled")
+                        } else {
+                            inferenceListener?.onError(requestId, throwable.message ?: "Unknown error")
+                        }
+                        callback("")
+                    }
                 }
-                
-                override fun onDone() {
-                    callback(requestResult)
-                }
-                
-                override fun onError(throwable: Throwable) {
-                    inferenceListener?.onError(requestId, throwable.message ?: "Unknown error")
+
+                conversation.sendMessageAsync(message, messageCallback)
+            } catch (e: Exception) {
+                if (!isActive) {
+                    inferenceListener?.logging("Generation was cancelled")
+                } else {
+                    inferenceListener?.onError(requestId, e.message ?: "Unknown error")
                     callback("")
                 }
             }
-            
-            conversation.sendMessageAsync(message, messageCallback)
-        } catch (e: Exception) {
-            inferenceListener?.onError(requestId, e.message ?: "Unknown error")
-            callback("")
         }
     }
     
+    override fun cancelGeneration() {
+        currentJob?.cancel()
+        currentJob = null
+        conversation.cancelProcess()
+        inferenceListener?.logging("Generation cancelled via cancelProcess()")
+    }
+
     override fun close() {
+        currentJob?.cancel()
+        currentJob = null
         try {
             conversation.close()
         } catch (e: Exception) {
             inferenceListener?.logging("Error closing conversation: ${e.message}")
         }
-        
+
         try {
             engine.close()
         } catch (e: Exception) {
             inferenceListener?.logging("Error closing engine: ${e.message}")
         }
-        
+
         clearPendingMedia()
     }
     
