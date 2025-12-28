@@ -13,9 +13,25 @@ import {
   LLMModel,
 } from "./LlmApi.types";
 import type { MultimodalOptions } from "./MediaPipeLlm.types";
-import type { PartialResponseEventPayload, ErrorResponseEventPayload } from "./MediaPipeLlm.types";
+import type {
+  PartialResponseEventPayload,
+  ErrorResponseEventPayload,
+} from "./MediaPipeLlm.types";
 
 let nextModelId = 1;
+
+// Counter for request IDs - must fit in 32-bit signed integer range
+let nextRequestId = 1;
+const MAX_REQUEST_ID = 2147483647; // 2^31 - 1
+
+function getNextRequestId(): number {
+  const id = nextRequestId;
+  nextRequestId = nextRequestId >= MAX_REQUEST_ID ? 1 : nextRequestId + 1;
+  return id;
+}
+
+// Store model handles for multimodal operations
+const modelHandles = new Map<string, number>();
 
 /**
  * Load an LLM model from a file path
@@ -50,12 +66,29 @@ export async function loadModel(
   );
 
   const modelId = `model-${nextModelId++}`;
+  modelHandles.set(modelId, handle);
 
   return {
     id: modelId,
+    handle,
     isLoaded: true,
+    enableVisionModality,
+    enableAudioModality,
     release: async () => {
       await MediaPipeLlm.releaseModel(handle);
+      modelHandles.delete(modelId);
+    },
+    addImage: async (imagePath: string) => {
+      if (!enableVisionModality) {
+        throw new Error("Vision modality is not enabled for this model");
+      }
+      return MediaPipeLlm.addImageToSession(handle, imagePath);
+    },
+    addAudio: async (audioPath: string) => {
+      if (!enableAudioModality) {
+        throw new Error("Audio modality is not enabled for this model");
+      }
+      return MediaPipeLlm.addAudioToSession(handle, audioPath);
     },
   };
 }
@@ -93,12 +126,29 @@ export async function loadModelFromAsset(
   );
 
   const modelId = `model-${nextModelId++}`;
+  modelHandles.set(modelId, handle);
 
   return {
     id: modelId,
+    handle,
     isLoaded: true,
+    enableVisionModality,
+    enableAudioModality,
     release: async () => {
       await MediaPipeLlm.releaseModel(handle);
+      modelHandles.delete(modelId);
+    },
+    addImage: async (imagePath: string) => {
+      if (!enableVisionModality) {
+        throw new Error("Vision modality is not enabled for this model");
+      }
+      return MediaPipeLlm.addImageToSession(handle, imagePath);
+    },
+    addAudio: async (audioPath: string) => {
+      if (!enableAudioModality) {
+        throw new Error("Audio modality is not enabled for this model");
+      }
+      return MediaPipeLlm.addAudioToSession(handle, audioPath);
     },
   };
 }
@@ -114,11 +164,127 @@ export async function releaseModel(model: LLMModel): Promise<void> {
  * Extract model handle from model instance (internal)
  */
 function getHandleFromModel(model: LLMModel): number {
-  const match = model.id.match(/model-(\d+)/);
-  if (!match) {
-    throw new Error("Invalid model ID format");
+  // First try to get the handle directly from the model
+  if (model.handle !== undefined) {
+    return model.handle;
   }
-  return parseInt(match[1], 10);
+  // Fallback to the stored handles map
+  const storedHandle = modelHandles.get(model.id);
+  if (storedHandle !== undefined) {
+    return storedHandle;
+  }
+  throw new Error("Model handle not found - model may have been released");
+}
+
+/**
+ * Add an image to the model session for multimodal inference (internal)
+ */
+async function addImageInternal(
+  handle: number,
+  imagePath: string
+): Promise<boolean> {
+  return MediaPipeLlm.addImageToSession(handle, imagePath);
+}
+
+/**
+ * Add audio to the model session for multimodal inference (internal)
+ */
+async function addAudioInternal(
+  handle: number,
+  audioPath: string
+): Promise<boolean> {
+  return MediaPipeLlm.addAudioToSession(handle, audioPath);
+}
+
+/**
+ * Check if a media type is an image
+ */
+function isImageMediaType(mediaType?: string): boolean {
+  if (!mediaType) return false;
+  return mediaType.startsWith("image/");
+}
+
+/**
+ * Check if a media type is audio
+ */
+function isAudioMediaType(mediaType?: string): boolean {
+  if (!mediaType) return false;
+  return mediaType.startsWith("audio/");
+}
+
+/**
+ * Extract file path from various input formats
+ * Supports string paths, file:// URIs, and data URIs (base64 not yet supported)
+ */
+function extractFilePath(
+  input: string | Uint8Array | Buffer | ArrayBuffer
+): string | null {
+  if (typeof input === "string") {
+    // Handle file:// URIs
+    if (input.startsWith("file://")) {
+      return input.replace("file://", "");
+    }
+    // Handle data URIs - not supported yet for native bridge
+    if (input.startsWith("data:")) {
+      console.warn("Data URIs are not yet supported for multimodal input");
+      return null;
+    }
+    // Assume it's a file path
+    return input;
+  }
+  // Binary data not yet supported - would need to write to temp file
+  console.warn("Binary data input not yet supported for multimodal input");
+  return null;
+}
+
+/**
+ * Process multimodal content from messages and add to session
+ * Automatically detects ImagePart and FilePart and calls appropriate native methods
+ */
+async function processMultimodalContent(
+  handle: number,
+  messages: ModelMessage[],
+  enableVisionModality: boolean,
+  enableAudioModality: boolean
+): Promise<void> {
+  for (const message of messages) {
+    if (message.role !== "user" || typeof message.content === "string") {
+      continue;
+    }
+
+    for (const part of message.content) {
+      if (part.type === "image") {
+        if (!enableVisionModality) {
+          console.warn("Vision modality not enabled, skipping image");
+          continue;
+        }
+        const imagePath = extractFilePath(part.image);
+        if (imagePath) {
+          console.log("Adding image to session:", imagePath);
+          await addImageInternal(handle, imagePath);
+        }
+      } else if (part.type === "file") {
+        const filePath = extractFilePath(part.data);
+        if (!filePath) continue;
+
+        if (isImageMediaType(part.mediaType)) {
+          if (!enableVisionModality) {
+            console.warn("Vision modality not enabled, skipping image file");
+            continue;
+          }
+          console.log("Adding image file to session:", filePath);
+          await addImageInternal(handle, filePath);
+        } else if (isAudioMediaType(part.mediaType)) {
+          if (!enableAudioModality) {
+            console.warn("Audio modality not enabled, skipping audio file");
+            continue;
+          }
+          console.log("Adding audio file to session:", filePath);
+          await addAudioInternal(handle, filePath);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -169,6 +335,7 @@ function messagesToPrompt(messages: ModelMessage[]): string {
 
 /**
  * Generate text from an LLM model (synchronous)
+ * Automatically processes multimodal content (images, audio) from messages
  */
 export async function generateText(
   model: LLMModel,
@@ -189,10 +356,22 @@ export async function generateText(
     });
   }
 
+  // Automatically process multimodal content from messages
+  await processMultimodalContent(
+    handle,
+    messages,
+    model.enableVisionModality ?? false,
+    model.enableAudioModality ?? false
+  );
+
   const prompt = messagesToPrompt(messages);
 
   try {
-    const text = await MediaPipeLlm.generateResponse(handle, Date.now(), prompt);
+    const text = await MediaPipeLlm.generateResponse(
+      handle,
+      getNextRequestId(),
+      prompt
+    );
 
     return {
       text,
@@ -288,6 +467,7 @@ async function* generateTextStream(
 
 /**
  * Generate streaming text from an LLM model (async generator)
+ * Automatically processes multimodal content (images, audio) from messages
  */
 export async function streamText(
   model: LLMModel,
@@ -296,65 +476,159 @@ export async function streamText(
 ): Promise<StreamTextResult> {
   const { abortSignal } = options;
   const handle = getHandleFromModel(model);
-  const requestId = Date.now();
-
-  const prompt = messagesToPrompt(messages);
+  const requestId = getNextRequestId();
 
   if (abortSignal?.aborted) {
     throw new Error("Generation was aborted");
   }
 
-  const textStream = generateTextStream(handle, requestId, prompt, abortSignal);
+  // Automatically process multimodal content from messages
+  await processMultimodalContent(
+    handle,
+    messages,
+    model.enableVisionModality ?? false,
+    model.enableAudioModality ?? false
+  );
+
+  const prompt = messagesToPrompt(messages);
+
+  // DEBUG: Log the requestId and handle we're using
+  console.log("[streamText] Starting with:", {
+    requestId,
+    handle,
+    promptLength: prompt.length,
+  });
+
+  // Shared state for both textStream and text Promise
+  const queue: string[] = [];
+  let accumulatedText = "";
+  let error: Error | null = null;
+  let isDone = false;
+  let textResolve: (text: string) => void;
+  let textReject: (error: Error) => void;
 
   const text = new Promise<string>((resolve, reject) => {
-    let accumulatedText = "";
-    const partialSubscription = MediaPipeLlm.addListener(
-      "onPartialResponse",
-      (ev: PartialResponseEventPayload) => {
-        if (
-          ev.requestId === requestId &&
-          ev.handle === handle &&
-          !(abortSignal?.aborted ?? false)
-        ) {
-          accumulatedText += ev.response;
-        }
-      }
-    );
-
-    const errorSubscription = MediaPipeLlm.addListener(
-      "onErrorResponse",
-      (ev: ErrorResponseEventPayload) => {
-        if (
-          ev.requestId === requestId &&
-          ev.handle === handle &&
-          !(abortSignal?.aborted ?? false)
-        ) {
-          partialSubscription.remove();
-          errorSubscription.remove();
-          reject(new Error(ev.error));
-        }
-      }
-    );
-
-    MediaPipeLlm.generateResponseAsync(handle, requestId, prompt)
-      .then(() => {
-        partialSubscription.remove();
-        errorSubscription.remove();
-        resolve(accumulatedText);
-      })
-      .catch((error) => {
-        partialSubscription.remove();
-        errorSubscription.remove();
-        reject(error);
-      });
+    textResolve = resolve;
+    textReject = reject;
   });
+
+  // Set up listeners once (shared between stream and text accumulator)
+  const partialSubscription = MediaPipeLlm.addListener(
+    "onPartialResponse",
+    (ev: PartialResponseEventPayload) => {
+      // DEBUG: Log every event with comparison info
+      const requestIdMatch = ev.requestId === requestId;
+      const handleMatch = ev.handle === handle;
+      console.log("[streamText] onPartialResponse event:", {
+        eventRequestId: ev.requestId,
+        expectedRequestId: requestId,
+        requestIdMatch,
+        eventHandle: ev.handle,
+        expectedHandle: handle,
+        handleMatch,
+        responseChunk: ev.response?.substring(0, 50),
+        aborted: abortSignal?.aborted ?? false,
+      });
+
+      if (requestIdMatch && handleMatch && !(abortSignal?.aborted ?? false)) {
+        console.log(
+          "[streamText] ✓ Match! Pushing to queue:",
+          ev.response?.substring(0, 30)
+        );
+        queue.push(ev.response);
+        accumulatedText += ev.response;
+      } else {
+        console.log("[streamText] ✗ No match, skipping chunk");
+      }
+    }
+  );
+
+  const errorSubscription = MediaPipeLlm.addListener(
+    "onErrorResponse",
+    (ev: ErrorResponseEventPayload) => {
+      console.log("[streamText] onErrorResponse event:", {
+        eventRequestId: ev.requestId,
+        expectedRequestId: requestId,
+        eventHandle: ev.handle,
+        expectedHandle: handle,
+        error: ev.error,
+      });
+      if (
+        ev.requestId === requestId &&
+        ev.handle === handle &&
+        !(abortSignal?.aborted ?? false)
+      ) {
+        error = new Error(ev.error);
+        cleanup();
+        textReject!(error);
+      }
+    }
+  );
+
+  const cleanup = () => {
+    console.log(
+      "[streamText] Cleanup called, accumulatedText length:",
+      accumulatedText.length
+    );
+    partialSubscription.remove();
+    errorSubscription.remove();
+  };
+
+  if (abortSignal) {
+    abortSignal.addEventListener("abort", () => {
+      console.log("[streamText] Abort signal received");
+      isDone = true;
+      cleanup();
+    });
+  }
+
+  // Start generation once (immediately when streamText is called)
+  console.log("[streamText] Calling generateResponseAsync...");
+  MediaPipeLlm.generateResponseAsync(handle, requestId, prompt)
+    .then(() => {
+      console.log("[streamText] generateResponseAsync completed successfully");
+      isDone = true;
+      cleanup();
+      textResolve!(accumulatedText);
+    })
+    .catch((err) => {
+      console.log("[streamText] generateResponseAsync failed:", err);
+      isDone = true;
+      cleanup();
+      textReject!(err);
+    });
+
+  // Create the async generator that yields from the shared queue
+  async function* createTextStream(): AsyncGenerator<string, void, unknown> {
+    console.log("[streamText] createTextStream started iterating");
+    while (!isDone || queue.length > 0) {
+      if (queue.length > 0) {
+        const chunk = queue.shift()!;
+        console.log("[streamText] Yielding chunk:", chunk?.substring(0, 30));
+        yield chunk;
+      } else if (isDone) {
+        console.log("[streamText] Stream done, breaking");
+        break;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    console.log(
+      "[streamText] createTextStream finished, total accumulated:",
+      accumulatedText.length
+    );
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  const textStream = createTextStream();
 
   const finishReason = new Promise<
     "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other"
   >((resolve) => {
-    text
-      .then(() => resolve("stop"))
-      .catch(() => resolve("error"));
+    text.then(() => resolve("stop")).catch(() => resolve("error"));
   });
 
   return {

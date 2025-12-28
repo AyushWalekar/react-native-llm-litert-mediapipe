@@ -109,7 +109,13 @@ export interface GenerateTextResult {
   /** The generated text */
   text: string;
   /** The finish reason ('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other') */
-  finishReason: "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other";
+  finishReason:
+    | "stop"
+    | "length"
+    | "content-filter"
+    | "tool-calls"
+    | "error"
+    | "other";
   /** Token usage information */
   usage?: {
     inputTokens?: number;
@@ -127,9 +133,13 @@ export interface StreamTextResult {
   /** Full text (consumes stream) */
   text: Promise<string>;
   /** Finish reason (consumes stream) */
-  finishReason: Promise<"stop" | "length" | "content-filter" | "tool-calls" | "error" | "other">;
+  finishReason: Promise<
+    "stop" | "length" | "content-filter" | "tool-calls" | "error" | "other"
+  >;
   /** Consume the stream without processing parts */
-  consumeStream: (options?: { onError?: (error: unknown) => void }) => Promise<void>;
+  consumeStream: (options?: {
+    onError?: (error: unknown) => void;
+  }) => Promise<void>;
 }
 
 /**
@@ -138,8 +148,18 @@ export interface StreamTextResult {
 export interface LLMModel {
   /** Unique identifier for the model */
   id: string;
+  /** Native model handle (internal use) */
+  handle?: number;
   /** Whether the model is loaded and ready */
   isLoaded: boolean;
+  /** Whether vision modality is enabled */
+  enableVisionModality?: boolean;
+  /** Whether audio modality is enabled */
+  enableAudioModality?: boolean;
   /** Release the model resources */
   release: () => Promise<void>;
+  /** Add an image to the session for multimodal inference */
+  addImage?: (imagePath: string) => Promise<boolean>;
+  /** Add audio to the session for multimodal inference */
+  addAudio?: (audioPath: string) => Promise<boolean>;
 }

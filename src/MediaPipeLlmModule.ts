@@ -25,7 +25,12 @@ import {
   PartialResponseEventPayload,
   ErrorResponseEventPayload,
 } from "./MediaPipeLlm.types";
-import type { LLMModel, ModelMessage, GenerationOptions, LoadModelConfig } from "./LlmApi.types";
+import type {
+  LLMModel,
+  ModelMessage,
+  GenerationOptions,
+  LoadModelConfig,
+} from "./LlmApi.types";
 
 // Hook Overloads
 export function useLLM(props: UseLLMDownloadableProps): DownloadableLlmReturn;
@@ -818,7 +823,10 @@ export function useStandardLLM(
       if (config.type === "file") {
         loadedModel = await loadModel(config.path, config.config ?? {});
       } else {
-        loadedModel = await loadModelFromAsset(config.name, config.config ?? {});
+        loadedModel = await loadModelFromAsset(
+          config.name,
+          config.config ?? {}
+        );
       }
       setModel(loadedModel);
     } catch (e) {
@@ -877,7 +885,9 @@ export function useStandardLLM(
   React.useEffect(() => {
     return () => {
       if (model) {
-        releaseModel(model).catch((e) => console.error("Failed to release model:", e));
+        releaseModel(model).catch((e) =>
+          console.error("Failed to release model:", e)
+        );
       }
     };
   }, [model]);
