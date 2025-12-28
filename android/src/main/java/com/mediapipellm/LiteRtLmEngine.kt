@@ -15,7 +15,6 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -36,7 +35,6 @@ class LiteRtLmEngine(
 
     // Coroutine scope for async operations
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
-    private val supervisorJob = SupervisorJob()
 
     // Pending multimodal content for next message
     private val pendingImages = mutableListOf<ByteArray>()
@@ -182,12 +180,13 @@ class LiteRtLmEngine(
     override fun cancelGeneration() {
         currentJob?.cancel()
         currentJob = null
-        inferenceListener?.logging("Generation cancelled")
+        conversation.cancelProcess()
+        inferenceListener?.logging("Generation cancelled via cancelProcess()")
     }
 
     override fun close() {
-        cancelGeneration()
-        supervisorJob.cancel()
+        currentJob?.cancel()
+        currentJob = null
         try {
             conversation.close()
         } catch (e: Exception) {
