@@ -18,7 +18,9 @@ import {
   Image,
   KeyboardAvoidingView,
   PermissionsAndroid,
+  Animated,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 
 import { useLLM } from 'react-native-llm-litert-mediapipe';
 import {
@@ -32,20 +34,34 @@ import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import * as AudioRecorder from './AudioRecorderJS';
 import RNFS from 'react-native-fs';
 
-// Gemma 3n E4B model URL (you'll need to provide your own URL or use HuggingFace)
+const THEME = {
+  gradient: ['#f6d365', '#fda085'],
+  glassBg: 'rgba(255, 255, 255, 0.25)',
+  glassBorder: 'rgba(255, 255, 255, 0.5)',
+  shadow: {
+    shadowColor: 'rgba(31, 38, 135, 0.15)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 32,
+    elevation: 8,
+  },
+  textColor: '#2d3436',
+  primaryColor: '#6c5ce7',
+  secondaryColor: '#00cec9',
+  accentColor: '#fd79a8',
+  xColor: '#0984e3',
+  oColor: '#e84393',
+};
+
 const MODEL_URL = 'https://huggingface.co/example/gemma-3n-e4b/resolve/main/gemma-3n-e4b.task';
 const MODEL_NAME = 'gemma-3n-e4b.task';
 
-// Preset local model paths (Android) - dynamically constructed to work on both emulator and device
-// MediaPipe .task model (vision support, limited audio)
 const PRESET_MEDIAPIPE_MODEL_PATH =
   `${RNFS.DocumentDirectoryPath}/16f676c9-6155-462a-a8bf-59247fc4c07b/gemma-3n-E4B-it-int4.task`;
 
-// LiteRT-LM .litertlm model (full audio support)
 const PRESET_LITERTLM_MODEL_PATH =
   `${RNFS.DocumentDirectoryPath}/litert/gemma-3n-E4B-it-int4.litertlm`;
 
-// Detect model type from path
 const isLiteRtLmModel = (path: string) => path.toLowerCase().endsWith('.litertlm');
 const isMediaPipeModel = (path: string) => path.toLowerCase().endsWith('.task');
 
@@ -57,13 +73,14 @@ export default function App() {
   const [localModelName, setLocalModelName] = useState<string | null>(null);
   const [localModelError, setLocalModelError] = useState<string | null>(null);
   const [modelEngineType, setModelEngineType] = useState<'mediapipe' | 'litertlm' | null>(null);
-  
-  // Multimodal state
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [showModelSection, setShowModelSection] = useState(true);
+  const [showMultimodalSection, setShowMultimodalSection] = useState(false);
   const scrollViewRef = React.useRef<ScrollView>(null);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   const downloadableLlm = useLLM({
     modelUrl: MODEL_URL,
@@ -72,7 +89,6 @@ export default function App() {
     topK: 40,
     temperature: 0.8,
     randomSeed: 42,
-    // Enable multimodal for Gemma 3n (Android only)
     enableVisionModality: Platform.OS === 'android',
     enableAudioModality: true,
   });
@@ -86,7 +102,6 @@ export default function App() {
     isCheckingStatus,
   } = downloadableLlm;
 
-  // Detect engine type when local model path changes
   React.useEffect(() => {
     if (localModelPath) {
       if (isLiteRtLmModel(localModelPath)) {
@@ -101,7 +116,6 @@ export default function App() {
     }
   }, [localModelPath]);
 
-  // Local model hook - multimodal options depend on detected engine type
   const localLlm = useLLM({
     storageType: 'file',
     modelPath: localModelPath ?? '',
@@ -110,7 +124,6 @@ export default function App() {
     temperature: 0.8,
     randomSeed: 42,
     enableVisionModality: true,
-    // Audio: enable for LiteRT-LM models (MediaPipe .task may not have AudioEncoder)
     enableAudioModality: Platform.OS === 'android' && modelEngineType === 'litertlm',
   });
 
@@ -121,7 +134,6 @@ export default function App() {
   );
   const { generateStreamingResponse, isLoaded, addImage, addAudio } = activeLlm;
 
-  // Cleanup any active recording on unmount
   useEffect(() => {
     return () => {
       if (isRecording) {
@@ -130,12 +142,19 @@ export default function App() {
     };
   }, [isRecording]);
 
+  React.useEffect(() => {
+    if (isLoaded) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isLoaded, fadeAnim]);
+
   const handleDownload = useCallback(async () => {
     try {
-      await downloadModel({
-        // Add HuggingFace token if needed
-        // headers: { 'Authorization': 'Bearer YOUR_HF_TOKEN' },
-      });
+      await downloadModel({});
     } catch (error) {
       console.error('Download error:', error);
     }
@@ -206,7 +225,6 @@ export default function App() {
     setModelEngineType(null);
   }, []);
 
-  // Load preset MediaPipe model
   const handleLoadPresetMediaPipe = useCallback(() => {
     setLocalModelError(null);
 
@@ -216,13 +234,11 @@ export default function App() {
     }
 
     console.log('Loading preset MediaPipe model from:', PRESET_MEDIAPIPE_MODEL_PATH);
-    // Set engine type FIRST to avoid double-load (both states update in same batch)
     setModelEngineType('mediapipe');
     setLocalModelPath(PRESET_MEDIAPIPE_MODEL_PATH);
     setLocalModelName(PRESET_MEDIAPIPE_MODEL_PATH.split('/').pop() ?? 'model');
   }, []);
 
-  // Load preset LiteRT-LM model
   const handleLoadPresetLiteRtLm = useCallback(() => {
     setLocalModelError(null);
 
@@ -232,13 +248,11 @@ export default function App() {
     }
 
     console.log('Loading preset LiteRT-LM model from:', PRESET_LITERTLM_MODEL_PATH);
-    // Set engine type FIRST to avoid double-load (both states update in same batch)
     setModelEngineType('litertlm');
     setLocalModelPath(PRESET_LITERTLM_MODEL_PATH);
     setLocalModelName(PRESET_LITERTLM_MODEL_PATH.split('/').pop() ?? 'model');
   }, []);
 
-  // Image picker handler
   const handlePickImage = useCallback(async () => {
     try {
       const result = await launchImageLibrary({
@@ -259,7 +273,7 @@ export default function App() {
       const selectedAsset: Asset | undefined = result.assets?.[0];
       if (selectedAsset?.uri) {
         setImageUri(selectedAsset.uri);
-        setResponse(''); // Clear previous response
+        setResponse('');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -271,10 +285,8 @@ export default function App() {
     setImageUri(null);
   }, []);
 
-  // Audio recording handlers using native AudioRecorder (16kHz, mono, PCM16 WAV)
   const handleStartRecording = useCallback(async () => {
     try {
-      // Request runtime permission on Android
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
@@ -294,7 +306,7 @@ export default function App() {
 
       await AudioRecorder.startRecording();
       setIsRecording(true);
-      setAudioUri(null); // Clear previous audio
+      setAudioUri(null);
       setAudioDuration(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -310,7 +322,7 @@ export default function App() {
       setAudioUri(result.path);
       setAudioDuration(result.duration);
       setIsRecording(false);
-      setResponse(''); // Clear previous response
+      setResponse('');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('Recording stop error:', message);
@@ -326,7 +338,6 @@ export default function App() {
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || !isLoaded) return;
 
-    // iOS doesn't support multimodal yet
     if (Platform.OS === 'ios' && (imageUri || audioUri)) {
       Alert.alert('Not Supported', 'iOS does not support multimodal input yet.');
       return;
@@ -336,16 +347,14 @@ export default function App() {
     setResponse('');
 
     try {
-      // Add image to session if selected
       if (imageUri && addImage) {
         console.log('Adding image to session:', imageUri);
-        const imagePath = imageUri.startsWith('file://') 
-          ? imageUri.replace('file://', '') 
+        const imagePath = imageUri.startsWith('file://')
+          ? imageUri.replace('file://', '')
           : imageUri;
         await addImage(imagePath);
       }
 
-      // Add audio to session if recorded
       if (audioUri && addAudio) {
         console.log('Adding audio to session:', audioUri);
         await addAudio(audioUri);
@@ -353,10 +362,10 @@ export default function App() {
 
       await generateStreamingResponse(
         prompt,
-        (partialResponse) => {
+        (partialResponse: string) => {
           setResponse((prev) => prev + partialResponse);
         },
-        (error) => {
+        (error: string) => {
           console.error('Generation error:', error);
         }
       );
@@ -371,416 +380,533 @@ export default function App() {
   const getStatusText = () => {
     if (usingLocalModel) {
       if (!localModelPath) return 'No local model selected';
-      const engineLabel = modelEngineType === 'litertlm' ? '🚀 LiteRT-LM' : modelEngineType === 'mediapipe' ? '🔧 MediaPipe' : '❓ Unknown';
-      if (isLoaded) return `✅ ${engineLabel} model loaded and ready`;
+      const engineLabel = modelEngineType === 'litertlm' ? 'LiteRT-LM' : modelEngineType === 'mediapipe' ? 'MediaPipe' : 'Unknown';
+      if (isLoaded) return `${engineLabel} model ready`;
       return `Loading ${engineLabel} model...`;
     }
     if (isCheckingStatus) return 'Checking model status...';
     if (downloadStatus === 'not_downloaded') return 'Model not downloaded';
-    if (downloadStatus === 'downloading') return `Downloading: ${Math.round(downloadProgress * 100)}%`;
+    if (downloadStatus === 'downloading') return `Downloading ${Math.round(downloadProgress * 100)}%`;
     if (downloadStatus === 'downloaded' && !isLoaded) return 'Ready to load';
-    if (isLoaded) return '✅ Model loaded and ready';
+    if (isLoaded) return 'Model ready';
     if (downloadStatus === 'error') return `Error: ${downloadError}`;
     return 'Unknown status';
   };
 
+  const getStatusColor = () => {
+    if (isLoaded) return THEME.secondaryColor;
+    if (downloadStatus === 'downloading') return THEME.primaryColor;
+    if (downloadStatus === 'error' || localModelError) return THEME.oColor;
+    return '#f39c12';
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+    <LinearGradient colors={THEME.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoider}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <ScrollView
           ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>MediaPipe LLM Demo</Text>
-            <Text style={styles.subtitle}>Gemma 3n On-Device Inference</Text>
+            <Text style={styles.title}>MediaPipe LLM</Text>
+            <Text style={styles.subtitle}>Gemma 3n • On-Device Inference</Text>
           </View>
 
-          <View style={styles.statusContainer}>
-            <Text style={styles.statusText}>{getStatusText()}</Text>
-            {usingLocalModel && localModelName && (
-              <Text style={styles.statusSubtext}>
-                Model: {localModelName}
-                {modelEngineType && ` (${modelEngineType === 'litertlm' ? 'LiteRT-LM engine' : 'MediaPipe engine'})`}
+          <TouchableOpacity
+            style={[styles.glassCard, styles.collapsibleHeader]}
+            onPress={() => setShowModelSection(!showModelSection)}
+          >
+            <View style={styles.collapsibleHeaderContent}>
+              <Text style={styles.collapsibleTitle}>Model Management</Text>
+              <Text style={[styles.collapsibleStatus, { color: getStatusColor() }]}>
+                {getStatusText()}
               </Text>
-            )}
-            {!usingLocalModel && downloadStatus === 'downloading' && (
-              <View style={styles.progressBar}>
-                <View
-                  style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]}
-                />
-              </View>
-            )}
-            {localModelError && <Text style={styles.errorText}>{localModelError}</Text>}
-          </View>
-
-          {/* Model Selection Section */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.button} onPress={handlePickLocalModel}>
-              <Text style={styles.buttonText}>📂 Import Model</Text>
-            </TouchableOpacity>
-            {usingLocalModel && (
-              <TouchableOpacity
-                style={[styles.button, styles.secondaryButton]}
-                onPress={handleClearLocalModel}
-              >
-                <Text style={styles.buttonText}>Use Downloaded</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Preset Model Buttons (Android only) */}
-          {!usingLocalModel && Platform.OS === 'android' && (
-            <View style={styles.presetSection}>
-              <Text style={styles.presetTitle}>Quick Load Preset Models</Text>
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={[styles.presetButton, styles.mediapipeButton]}
-                  onPress={handleLoadPresetMediaPipe}
-                >
-                  <Text style={styles.buttonText}>🔧 MediaPipe</Text>
-                  <Text style={styles.presetSubtext}>.task (vision)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.presetButton, styles.litertlmButton]}
-                  onPress={handleLoadPresetLiteRtLm}
-                >
-                  <Text style={styles.buttonText}>🚀 LiteRT-LM</Text>
-                  <Text style={styles.presetSubtext}>.litertlm (audio)</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          )}
+            <Text style={styles.collapsibleArrow}>{showModelSection ? '▼' : '▶'}</Text>
+          </TouchableOpacity>
 
-          <View style={styles.buttonRow}>
-            {!usingLocalModel && downloadStatus === 'not_downloaded' && (
-              <TouchableOpacity style={styles.button} onPress={handleDownload}>
-                <Text style={styles.buttonText}>Download Model</Text>
-              </TouchableOpacity>
-            )}
-
-            {!usingLocalModel && downloadStatus === 'downloaded' && !isLoaded && (
-              <TouchableOpacity style={styles.button} onPress={handleLoad}>
-                <Text style={styles.buttonText}>Load Model</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {isLoaded && (
-            <>
-              {/* Multimodal Input Section */}
-              {Platform.OS === 'android' && (
-                <View style={styles.multimodalSection}>
-                  <Text style={styles.sectionTitle}>Multimodal Input (Optional)</Text>
-                  
-                  {/* Image Input */}
-                  <View style={styles.mediaRow}>
-                    <TouchableOpacity 
-                      style={[styles.mediaButton, imageUri && styles.mediaButtonActive]} 
-                      onPress={handlePickImage}
-                    >
-                      <Text style={styles.mediaButtonText}>
-                        {imageUri ? '📷 Change Image' : '📷 Add Image'}
-                      </Text>
-                    </TouchableOpacity>
-                    {imageUri && (
-                      <TouchableOpacity 
-                        style={styles.clearButton} 
-                        onPress={handleClearImage}
-                      >
-                        <Text style={styles.clearButtonText}>✕</Text>
-                      </TouchableOpacity>
-                    )}
+          {showModelSection && (
+            <Animated.View style={styles.section}>
+              <View style={[styles.glassCard, styles.statusCard]}>
+                <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
+                <Text style={styles.statusText}>{getStatusText()}</Text>
+                {usingLocalModel && localModelName && (
+                  <Text style={styles.statusSubtext}>
+                    {localModelName}
+                    {modelEngineType && ` (${modelEngineType === 'litertlm' ? 'LiteRT-LM' : 'MediaPipe'})`}
+                  </Text>
+                )}
+                {!usingLocalModel && downloadStatus === 'downloading' && (
+                  <View style={styles.progressBarContainer}>
+                    <View style={styles.progressBarBg}>
+                        <View
+                          style={[styles.progressBarFill, { backgroundColor: THEME.primaryColor, width: `${downloadProgress * 100}%` }]}
+                        />
+                      </View>
+                      <Text style={[styles.progressText, { color: THEME.primaryColor }]}>{Math.round(downloadProgress * 100)}%</Text>
                   </View>
-                  
-                  {imageUri && (
-                    <Image 
-                      source={{ uri: imageUri }} 
-                      style={styles.imagePreview} 
-                      resizeMode="cover"
-                    />
-                  )}
-                  
-                  {/* Audio Input */}
-                  <View style={styles.mediaRow}>
-                    <TouchableOpacity 
-                      style={[
-                        styles.mediaButton, 
-                        isRecording && styles.recordingButton,
-                        audioUri && styles.mediaButtonActive
-                      ]} 
-                      onPress={isRecording ? handleStopRecording : handleStartRecording}
-                    >
-                      <Text style={styles.mediaButtonText}>
-                        {isRecording ? '⏹ Stop Recording' : audioUri ? '🎤 Re-record Audio' : '🎤 Record Audio'}
-                      </Text>
+                )}
+                {localModelError && <Text style={styles.errorText}>{localModelError}</Text>}
+              </View>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={[styles.glassButton, styles.secondaryButton]} onPress={handlePickLocalModel}>
+                  <Text style={[styles.buttonText, { color: THEME.textColor }]}>Import Model</Text>
+                </TouchableOpacity>
+                {usingLocalModel && (
+                  <TouchableOpacity style={[styles.outlineButton]} onPress={handleClearLocalModel}>
+                    <Text style={[styles.outlineButtonText, { color: THEME.textColor }]}>Use Downloaded</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {!usingLocalModel && Platform.OS === 'android' && (
+                <View style={[styles.glassCard, styles.presetSection]}>
+                  <Text style={styles.presetTitle}>Quick Load Presets</Text>
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity style={[styles.presetButton, { backgroundColor: THEME.xColor }]} onPress={handleLoadPresetMediaPipe}>
+                      <Text style={styles.presetButtonText}>MediaPipe</Text>
+                      <Text style={styles.presetSubtext}>.task (vision)</Text>
                     </TouchableOpacity>
-                    {audioUri && !isRecording && (
-                      <TouchableOpacity 
-                        style={styles.clearButton} 
-                        onPress={handleClearAudio}
-                      >
-                        <Text style={styles.clearButtonText}>✕</Text>
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity style={[styles.presetButton, { backgroundColor: THEME.oColor }]} onPress={handleLoadPresetLiteRtLm}>
+                      <Text style={styles.presetButtonText}>LiteRT-LM</Text>
+                      <Text style={styles.presetSubtext}>.litertlm (audio)</Text>
+                    </TouchableOpacity>
                   </View>
-                  
-                  {audioUri && (
-                    <Text style={styles.audioInfo}>
-                      Audio recorded: {audioUri.split('/').pop()}
-                      {audioDuration ? ` (${audioDuration.toFixed(1)}s, 16kHz mono)` : ''}
-                    </Text>
-                  )}
                 </View>
               )}
 
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your prompt..."
-                placeholderTextColor="#888"
-                value={prompt}
-                onChangeText={setPrompt}
-                multiline
-                onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-              />
-
-              <TouchableOpacity
-                style={[styles.button, styles.generateButton, isGenerating && styles.buttonDisabled]}
-                onPress={handleGenerate}
-                disabled={isGenerating || !prompt.trim() || !isLoaded}
-              >
-                {isGenerating ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.buttonText}>Generate Response</Text>
+              <View style={styles.buttonRow}>
+                {!usingLocalModel && downloadStatus === 'not_downloaded' && (
+                  <TouchableOpacity style={[styles.primaryButton, { backgroundColor: THEME.primaryColor }]} onPress={handleDownload}>
+                    <Text style={styles.primaryButtonText}>Download Model</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
 
-              <View style={styles.responseContainer}>
-                <Text style={styles.responseText}>{response || 'Response will appear here...'}</Text>
+                {!usingLocalModel && downloadStatus === 'downloaded' && !isLoaded && (
+                  <TouchableOpacity style={[styles.primaryButton, { backgroundColor: THEME.primaryColor }]} onPress={handleLoad}>
+                    <Text style={styles.primaryButtonText}>Load Model</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            </>
+            </Animated.View>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          {isLoaded && (
+            <Animated.View style={{ opacity: fadeAnim }}>
+              {Platform.OS === 'android' && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.glassCard, styles.collapsibleHeader]}
+                    onPress={() => setShowMultimodalSection(!showMultimodalSection)}
+                  >
+                    <View style={styles.collapsibleHeaderContent}>
+                      <Text style={styles.collapsibleTitle}>Multimodal Input</Text>
+                      {(imageUri || audioUri) && (
+                        <Text style={styles.collapsibleStatus}>Active</Text>
+                      )}
+                    </View>
+                    <Text style={styles.collapsibleArrow}>{showMultimodalSection ? '▼' : '▶'}</Text>
+                  </TouchableOpacity>
+
+                  {showMultimodalSection && (
+                      <View style={styles.section}>
+                        <View style={[styles.glassCard, styles.mediaSection]}>
+                        <View style={styles.mediaRow}>
+                          <TouchableOpacity
+                            style={[styles.mediaButton, imageUri && styles.mediaButtonActive]}
+                            onPress={handlePickImage}
+                          >
+                            <Text style={styles.mediaIcon}>📷</Text>
+                            <Text style={[styles.mediaButtonText, { color: THEME.textColor }]}>
+                              {imageUri ? 'Change' : 'Add Image'}
+                            </Text>
+                          </TouchableOpacity>
+                          {imageUri && (
+                            <TouchableOpacity style={[styles.removeButton, { backgroundColor: THEME.oColor }]} onPress={handleClearImage}>
+                              <Text style={styles.removeButtonText}>✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        {imageUri && (
+                          <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                        )}
+
+                        <View style={styles.mediaRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.mediaButton,
+                              isRecording && styles.recordingButton,
+                              audioUri && styles.mediaButtonActive,
+                            ]}
+                            onPress={isRecording ? handleStopRecording : handleStartRecording}
+                          >
+                            <Text style={styles.mediaIcon}>🎤</Text>
+                            <Text style={[styles.mediaButtonText, { color: THEME.textColor }]}>
+                              {isRecording ? 'Stop' : audioUri ? 'Re-record' : 'Record'}
+                            </Text>
+                          </TouchableOpacity>
+                          {audioUri && !isRecording && (
+                            <TouchableOpacity style={[styles.removeButton, { backgroundColor: THEME.oColor }]} onPress={handleClearAudio}>
+                              <Text style={styles.removeButtonText}>✕</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        {audioUri && (
+                          <Text style={[styles.audioInfo, { color: THEME.textColor }]}>
+                            {audioUri.split('/').pop()}
+                            {audioDuration && ` • ${audioDuration.toFixed(1)}s`}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+
+              <View style={[styles.glassCard, styles.promptSection]}>
+                <Text style={[styles.inputLabel, { color: THEME.textColor }]}>Your Prompt</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Type your message here..."
+                  placeholderTextColor="#6b7280"
+                  value={prompt}
+                  onChangeText={setPrompt}
+                  multiline
+                  onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                />
+                <TouchableOpacity
+                  style={[styles.generateButton, { backgroundColor: THEME.primaryColor }, (!prompt.trim() || isGenerating) && styles.generateButtonDisabled]}
+                  onPress={handleGenerate}
+                  disabled={!prompt.trim() || isGenerating}
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.generateButtonText}>Generate Response</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.glassCard, styles.responseSection]}>
+                <Text style={[styles.responseLabel, { color: THEME.textColor }]}>Response</Text>
+                <View style={styles.responseCard}>
+                  <Text style={[styles.responseText, { color: THEME.textColor }]}>{response || 'AI response will appear here...'}</Text>
+                </View>
+              </View>
+            </Animated.View>
+          )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+  },
+  safeArea: {
+    flex: 1,
   },
   keyboardAvoider: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: 20,
+    paddingBottom: 40,
   },
   header: {
-    alignItems: 'center',
     marginBottom: 24,
-    paddingTop: 16,
+    paddingTop: 12,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#2d3436',
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 4,
+    fontSize: 15,
+    color: '#636e72',
+    marginTop: 6,
   },
-  statusContainer: {
-    backgroundColor: '#252542',
+  glassCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    shadowColor: 'rgba(31, 38, 135, 0.15)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 32,
+    elevation: 8,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
-    borderRadius: 12,
+    marginBottom: 12,
+  },
+  collapsibleHeaderContent: {
+    flex: 1,
+  },
+  collapsibleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2d3436',
+    marginBottom: 4,
+  },
+  collapsibleStatus: {
+    fontSize: 13,
+    color: '#636e72',
+  },
+  collapsibleArrow: {
+    fontSize: 14,
+    color: '#636e72',
+    marginLeft: 12,
+  },
+  section: {
+    marginBottom: 8,
+  },
+  statusCard: {
+    padding: 20,
     marginBottom: 16,
   },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 12,
+  },
   statusText: {
-    color: '#fff',
-    fontSize: 16,
-    textAlign: 'center',
+    color: '#2d3436',
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   statusSubtext: {
-    color: '#aaa',
-    fontSize: 13,
-    marginTop: 6,
-    textAlign: 'center',
+    color: '#636e72',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  progressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#334155',
+    borderRadius: 3,
+    marginRight: 12,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 40,
   },
   errorText: {
-    color: '#ff8a8a',
-    fontSize: 13,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#333',
-    borderRadius: 4,
+    color: '#e84393',
+    fontSize: 14,
     marginTop: 12,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: 4,
   },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'center',
+    gap: 12,
     marginBottom: 16,
   },
-  button: {
-    backgroundColor: '#6C63FF',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 12,
-    marginHorizontal: 6,
-  },
-  secondaryButton: {
-    backgroundColor: '#3b3b5c',
-  },
-  generateButton: {
-    marginTop: 12,
-    alignSelf: 'stretch',
+  primaryButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
     alignItems: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  glassButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   buttonText: {
-    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  input: {
-    backgroundColor: '#252542',
-    color: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    fontSize: 16,
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  responseContainer: {
-    backgroundColor: '#252542',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-    minHeight: 140,
-  },
-  responseText: {
-    color: '#fff',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  // Multimodal styles
-  multimodalSection: {
-    backgroundColor: '#252542',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  mediaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  mediaButton: {
+  secondaryButton: {},
+  outlineButton: {
     flex: 1,
-    backgroundColor: '#3b3b5c',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    paddingVertical: 16,
+    borderRadius: 14,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'transparent',
   },
-  mediaButtonActive: {
-    backgroundColor: '#4CAF50',
-  },
-  recordingButton: {
-    backgroundColor: '#e53935',
-  },
-  mediaButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  clearButton: {
-    marginLeft: 8,
-    backgroundColor: '#e53935',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearButtonText: {
-    color: '#fff',
+  outlineButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  imagePreview: {
-    width: '100%',
-    height: 150,
-    borderRadius: 10,
-    marginVertical: 8,
-  },
-  audioInfo: {
-    color: '#aaa',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  // Preset model selection styles
   presetSection: {
-    backgroundColor: '#1e1e3f',
-    borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#333',
   },
   presetTitle: {
-    color: '#888',
+    color: '#636e72',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   presetButton: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    marginHorizontal: 4,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  mediapipeButton: {
-    backgroundColor: '#4a90d9',
-  },
-  litertlmButton: {
-    backgroundColor: '#e67e22',
+  presetButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   presetSubtext: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    marginTop: 4,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+  },
+  mediaSection: {
+    padding: 20,
+  },
+  mediaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  mediaButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  mediaButtonActive: {
+    backgroundColor: 'rgba(0, 206, 201, 0.3)',
+    borderColor: '#00cec9',
+  },
+  recordingButton: {
+    backgroundColor: 'rgba(232, 67, 147, 0.3)',
+    borderColor: '#e84393',
+  },
+  mediaIcon: {
+    fontSize: 18,
+  },
+  mediaButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  removeButton: {
+    marginLeft: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  audioInfo: {
+    color: '#94a3b8',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  promptSection: {
+    padding: 20,
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  input: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    padding: 16,
+    borderRadius: 12,
+    fontSize: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  generateButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  generateButtonDisabled: {
+    opacity: 0.5,
+  },
+  generateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  responseSection: {
+    padding: 20,
+  },
+  responseLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  responseCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 12,
+    padding: 16,
+    minHeight: 140,
+  },
+  responseText: {
+    fontSize: 15,
+    lineHeight: 24,
   },
 });

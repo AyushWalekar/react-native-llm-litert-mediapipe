@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Text,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 
 import App from './App';
 import StandardApiDemo from './StandardApiDemo';
@@ -20,13 +21,11 @@ export default function RootNavigator() {
   const [activeScreen, setActiveScreen] = useState<Screen>('legacy');
 
   return (
-    <View style={styles.container}>
-      {/* Screen Content */}
+    <LinearGradient colors={['#f5e09aff', '#fcede9ff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
       <View style={styles.screenContainer}>
         {activeScreen === 'legacy' ? <App /> : <StandardApiDemo />}
       </View>
 
-      {/* Bottom Tab Bar */}
       <SafeAreaView style={styles.tabBarContainer}>
         <View style={styles.tabBar}>
           <TouchableOpacity
@@ -49,31 +48,31 @@ export default function RootNavigator() {
               ✨
             </Text>
             <Text style={[styles.tabLabel, activeScreen === 'standard' && styles.activeTabText]}>
-              Standard API
+              AI-SDK Like API
             </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
+    flex:1,
   },
   screenContainer: {
-    flex: 1,
+    flex:1,
   },
   tabBarContainer: {
-    backgroundColor: '#0f0f1a',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderTopWidth: 1,
-    borderTopColor: '#333',
+    borderTopColor: 'rgba(255, 255, 255, 0.5)',
   },
   tabBar: {
     flexDirection: 'row',
-    height: 60,
+    height: 64,
+    paddingTop: 8,
   },
   tab: {
     flex: 1,
@@ -82,20 +81,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   activeTab: {
-    backgroundColor: '#252542',
-    borderTopWidth: 2,
-    borderTopColor: '#6C63FF',
+    borderTopWidth: 3,
+    borderTopColor: '#6c5ce7',
   },
   tabIcon: {
-    fontSize: 20,
-    marginBottom: 2,
+    fontSize: 22,
+    marginBottom: 4,
   },
   tabLabel: {
     fontSize: 12,
-    color: '#888',
+    color: '#636e72',
     fontWeight: '500',
   },
   activeTabText: {
-    color: '#6C63FF',
+    color: '#2d3436',
   },
 });
