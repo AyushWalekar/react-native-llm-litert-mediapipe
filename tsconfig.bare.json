@@ -17,21 +17,13 @@
     "resolveJsonModule": true
   },
   "include": [
-    "src/index-bare.ts",
-    "src/NativeMediaPipeLlm.ts",
-    "src/MediaPipeLlmModule.ts",
-    "src/MediaPipeLlm.types.ts",
-    "src/ModelManagerBare.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "lib",
     "build",
     "example",
-    "example-bare",
-    "src/index.ts",
-    "src/ExpoLlmMediapipeModule.ts",
-    "src/ExpoLlmMediapipe.types.ts",
-    "src/ModelManager.ts"
+    "example-bare"
   ]
 }

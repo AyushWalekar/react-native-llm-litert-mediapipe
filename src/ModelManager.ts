@@ -1,9 +1,9 @@
 /**
- * ModelManager for bare React Native
+ * ModelManager for React Native
  * Manages the lifecycle of LLM models (downloading, deleting, status tracking)
  */
-import { DownloadProgressEvent } from "./MediaPipeLlm.types";
-import MediaPipeLlm from "./NativeMediaPipeLlm";
+import { DownloadProgressEvent } from "./LitertLlm.types";
+import LitertLlm from "./NativeLitertLlm";
 
 export interface ModelInfo {
   name: string;
@@ -32,7 +32,7 @@ export class ModelManager {
 
   constructor() {
     // Set up download progress listener
-    this.downloadSubscription = MediaPipeLlm.addListener(
+    this.downloadSubscription = LitertLlm.addListener(
       "downloadProgress",
       this.handleDownloadProgress
     );
@@ -48,10 +48,10 @@ export class ModelManager {
         status === "completed"
           ? "downloaded"
           : status === "error"
-          ? "error"
-          : status === "downloading"
-          ? "downloading"
-          : "not_downloaded";
+            ? "error"
+            : status === "downloading"
+              ? "downloading"
+              : "not_downloaded";
 
       if (progress !== undefined) {
         model.progress = progress;
@@ -89,7 +89,7 @@ export class ModelManager {
 
   private async checkModelStatus(modelName: string): Promise<void> {
     try {
-      const isDownloaded = await MediaPipeLlm.isModelDownloaded(modelName);
+      const isDownloaded = await LitertLlm.isModelDownloaded(modelName);
       const model = this.models.get(modelName);
 
       if (model) {
@@ -131,7 +131,7 @@ export class ModelManager {
       };
 
       // Start download with options
-      const result = await MediaPipeLlm.downloadModel(
+      const result = await LitertLlm.downloadModel(
         model.url,
         modelName,
         downloadOptions
@@ -153,7 +153,7 @@ export class ModelManager {
    * @returns A promise that resolves to true if the cancellation was successful.
    */
   public async cancelDownload(modelName: string): Promise<boolean> {
-    return MediaPipeLlm.cancelDownload(modelName);
+    return LitertLlm.cancelDownload(modelName);
   }
 
   /**
@@ -162,7 +162,7 @@ export class ModelManager {
    * @returns A promise that resolves to true if the deletion was successful.
    */
   public async deleteModel(modelName: string): Promise<boolean> {
-    const result = await MediaPipeLlm.deleteDownloadedModel(modelName);
+    const result = await LitertLlm.deleteDownloadedModel(modelName);
 
     if (result) {
       const model = this.models.get(modelName);

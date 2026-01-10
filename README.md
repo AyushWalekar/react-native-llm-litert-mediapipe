@@ -1,17 +1,17 @@
 # react-native-llm-litert-mediapipe
 
-React Native module for on-device LLM inference using Google MediaPipe. Supports Gemma 3n and other MediaPipe-compatible models.
+React Native module for on-device LLM inference using LiteRT/MediaPipe. Supports Gemma 3n and other compatible models.
 
 **No Expo required!** This is a bare React Native package.
 
 ## Features
 
 - 🚀 On-device LLM inference (no cloud required)
-- 📱 Supports Android (24+) and iOS (14+)
+- 📱 Supports Android (SDK 24+) and iOS (14+)
 - 🎨 Multimodal support (images/audio) on Android with Gemma 3n
 - 📥 Built-in model download management
 - ⚡ Streaming response generation
-- 🔧 React hooks for easy integration
+- 🔧 AI SDK compatible API design
 
 ## Installation
 
@@ -58,54 +58,57 @@ override fun getPackages(): List<ReactPackage> {
 }
 ```
 
-## Usage
-
-### Basic Usage with useLLM Hook
+## Quick Start
 
 ```tsx
-import { useLLM } from 'react-native-llm-litert-mediapipe';
+import { useLlm, type ModelMessage } from 'react-native-llm-litert-mediapipe';
 
 function ChatScreen() {
   const {
-    downloadModel,
-    loadModel,
-    generateStreamingResponse,
     isLoaded,
-    downloadStatus,
-    downloadProgress,
-  } = useLLM({
-    modelUrl: 'https://your-model-url/gemma-3n-e4b.task',
-    modelName: 'gemma-3n-e4b.task',
-    maxTokens: 1024,
-    topK: 40,
-    temperature: 0.8,
-    randomSeed: 42,
+    isLoading,
+    loadModel,
+    generate,
+    stream,
+    cancel,
+  } = useLlm({
+    type: 'file',
+    path: '/path/to/model.litertlm',
+    config: {
+      maxTokens: 1024,
+      topK: 40,
+      temperature: 0.8,
+    },
   });
 
-  // Download the model first
-  const handleDownload = async () => {
-    await downloadModel({
-      headers: { 'Authorization': 'Bearer YOUR_HF_TOKEN' }, // If needed
-    });
-  };
-
-  // Load after download completes
+  // Load the model
   const handleLoad = async () => {
     await loadModel();
   };
 
-  // Generate responses
+  // Generate a complete response
   const handleGenerate = async (prompt: string) => {
-    let response = '';
-    await generateStreamingResponse(
-      prompt,
-      (partial) => {
-        response += partial;
-        console.log('Partial:', partial);
-      },
-      (error) => console.error('Error:', error)
-    );
-    console.log('Full response:', response);
+    const messages: ModelMessage[] = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: prompt },
+    ];
+    
+    const result = await generate(messages);
+    console.log('Response:', result.text);
+  };
+
+  // Stream responses token by token
+  const handleStream = async (prompt: string) => {
+    const messages: ModelMessage[] = [
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: prompt },
+    ];
+    
+    const result = await stream(messages);
+    
+    for await (const chunk of result.textStream) {
+      console.log('Chunk:', chunk);
+    }
   };
 
   return (
@@ -114,91 +117,162 @@ function ChatScreen() {
 }
 ```
 
+## API Reference
+
+### `useLlm` Hook
+
+The main hook for using the LLM API.
+
+```tsx
+const llm = useLlm({
+  type: 'file' | 'asset',
+  path: string,          // for type: 'file'
+  name: string,          // for type: 'asset'
+  config: {
+    maxTokens?: number,      // Maximum tokens to generate (default: 1024)
+    topK?: number,           // Top-K sampling (default: 40)
+    temperature?: number,    // Sampling temperature (default: 0.8)
+    randomSeed?: number,     // Random seed for reproducibility
+    enableVisionModality?: boolean,  // Enable image input (Android only)
+    enableAudioModality?: boolean,   // Enable audio input (Android only)
+    maxNumImages?: number,   // Max images per session (default: 10)
+  }
+});
+```
+
+#### Return Values
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `model` | `LLMModel \| null` | The loaded model instance |
+| `isLoaded` | `boolean` | Whether the model is ready |
+| `isLoading` | `boolean` | Whether the model is loading |
+| `isGenerating` | `boolean` | Whether text generation is in progress |
+| `error` | `string \| null` | Error message if loading failed |
+| `loadModel` | `() => Promise<void>` | Load the model |
+| `unloadModel` | `() => Promise<void>` | Unload and release resources |
+| `generate` | `(messages, options?) => Promise<GenerateTextResult>` | Generate complete response |
+| `stream` | `(messages, options?) => Promise<StreamTextResult>` | Stream response tokens |
+| `cancel` | `() => Promise<void>` | Cancel ongoing generation |
+
+### Functional API
+
+For more control, you can use the functional API directly:
+
+```tsx
+import { 
+  loadModel, 
+  loadModelFromAsset,
+  generateText, 
+  streamText, 
+  releaseModel,
+  stopGeneration,
+} from 'react-native-llm-litert-mediapipe';
+
+// Load model
+const model = await loadModel('/path/to/model.litertlm', {
+  maxTokens: 1024,
+  temperature: 0.8,
+});
+
+// Generate text
+const result = await generateText(model, messages);
+console.log(result.text);
+
+// Stream text
+const streamResult = await streamText(model, messages);
+for await (const chunk of streamResult.textStream) {
+  console.log(chunk);
+}
+
+// Clean up
+await releaseModel(model);
+```
+
+### Model Manager
+
+For managing model downloads:
+
+```tsx
+import { modelManager } from 'react-native-llm-litert-mediapipe';
+
+// Register a model
+modelManager.registerModel('gemma-3n', 'https://your-url/gemma-3n.litertlm');
+
+// Download
+await modelManager.downloadModel('gemma-3n', {
+  headers: { Authorization: 'Bearer YOUR_TOKEN' },
+});
+
+// Check status
+const model = modelManager.getModel('gemma-3n');
+console.log(model?.status); // 'downloaded'
+
+// Delete
+await modelManager.deleteModel('gemma-3n');
+```
+
 ### Multimodal Support (Android Only)
 
 Gemma 3n supports image and audio inputs on Android:
 
 ```tsx
-const { addImage, addAudio, generateStreamingResponse, isLoaded } = useLLM({
-  modelUrl: MODEL_URL,
-  modelName: 'gemma-3n-e4b.task',
-  enableVisionModality: true,  // Enable image support
-  enableAudioModality: true,   // Enable audio support (mono WAV)
-  maxNumImages: 10,
+import { useLlm, type ModelMessage, type ImagePart, type FilePart } from 'react-native-llm-litert-mediapipe';
+
+const { generate } = useLlm({
+  type: 'file',
+  path: MODEL_PATH,
+  config: {
+    enableVisionModality: true,
+    enableAudioModality: true,
+  },
 });
 
-// Add image before generating
-await addImage('/path/to/image.jpg');
-await generateStreamingResponse('What do you see in this image?', onPartial);
+// With image
+const messages: ModelMessage[] = [
+  {
+    role: 'user',
+    content: [
+      { type: 'image', image: '/path/to/image.jpg', mediaType: 'image/jpeg' },
+      { type: 'text', text: 'What do you see in this image?' },
+    ],
+  },
+];
+const result = await generate(messages);
 
-// Add audio before generating
-await addAudio('/path/to/audio.wav'); // Must be mono WAV
-await generateStreamingResponse('What was said in this audio?', onPartial);
+// With audio
+const messagesWithAudio: ModelMessage[] = [
+  {
+    role: 'user',
+    content: [
+      { type: 'file', data: '/path/to/audio.wav', mediaType: 'audio/wav' },
+      { type: 'text', text: 'Transcribe this audio' },
+    ],
+  },
+];
 ```
 
-### Using ModelManager for Manual Control
+## Message Format
+
+Messages follow the AI SDK compatible format:
 
 ```tsx
-import { modelManager, MediaPipeLlm } from 'react-native-llm-litert-mediapipe';
+type ModelMessage = 
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | ContentPart[] }
+  | { role: 'assistant'; content: string | TextPart[] };
 
-// Register models
-modelManager.registerModel('gemma-3n', 'https://your-url/gemma-3n.task');
+type ContentPart = TextPart | ImagePart | FilePart;
 
-// Download
-await modelManager.downloadModel('gemma-3n');
-
-// Create model handle directly
-const handle = await MediaPipeLlm.createModelFromDownloaded(
-  'gemma-3n',
-  1024,  // maxTokens
-  40,    // topK
-  0.8,   // temperature
-  42,    // randomSeed
-  { enableVisionModality: true }
-);
-
-// Generate
-await MediaPipeLlm.generateResponseAsync(handle, requestId, prompt);
-
-// Clean up
-await MediaPipeLlm.releaseModel(handle);
+type TextPart = { type: 'text'; text: string };
+type ImagePart = { type: 'image'; image: string; mediaType?: string };
+type FilePart = { type: 'file'; data: string; mediaType: string; filename?: string };
 ```
-
-## API Reference
-
-### useLLM Hook
-
-| Prop | Type | Description |
-|------|------|-------------|
-| `modelUrl` | `string` | URL to download the model from |
-| `modelName` | `string` | Local filename for the model |
-| `maxTokens` | `number` | Maximum tokens to generate (default: 512) |
-| `topK` | `number` | Top-K sampling (default: 40) |
-| `temperature` | `number` | Sampling temperature (default: 0.8) |
-| `randomSeed` | `number` | Random seed for reproducibility |
-| `enableVisionModality` | `boolean` | Enable image input (Android only) |
-| `enableAudioModality` | `boolean` | Enable audio input (Android only) |
-| `maxNumImages` | `number` | Max images per session (default: 10) |
-
-### Return Values
-
-| Value | Type | Description |
-|-------|------|-------------|
-| `downloadModel` | `(options?) => Promise<boolean>` | Start model download |
-| `loadModel` | `() => Promise<void>` | Load downloaded model |
-| `generateResponse` | `(prompt, onPartial?, onError?) => Promise<string>` | Generate complete response |
-| `generateStreamingResponse` | `(prompt, onPartial?, onError?) => Promise<void>` | Stream response tokens |
-| `addImage` | `(imagePath) => Promise<boolean>` | Add image to session (Android) |
-| `addAudio` | `(audioPath) => Promise<boolean>` | Add audio to session (Android) |
-| `isLoaded` | `boolean` | Whether model is ready |
-| `downloadStatus` | `string` | Current download status |
-| `downloadProgress` | `number` | Download progress (0-1) |
-| `downloadError` | `string \| null` | Download error message |
 
 ## Supported Models
 
 - **Gemma 3n E4B** - Recommended for on-device inference
-- Other MediaPipe LLM-compatible `.task` files
+- Other LiteRT/MediaPipe compatible `.litertlm` or `.task` files
 
 ## Platform Requirements
 
@@ -224,8 +298,8 @@ Ensure the model file is added to your Xcode project's "Copy Bundle Resources" b
 
 Add authentication headers:
 ```tsx
-await downloadModel({
-  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
+await modelManager.downloadModel('gemma-3n', {
+  headers: { Authorization: 'Bearer YOUR_TOKEN' },
 });
 ```
 

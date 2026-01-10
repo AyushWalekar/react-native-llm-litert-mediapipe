@@ -3,7 +3,7 @@
  * Provides loadModel, releaseModel, generateText, streamText, stopGeneration
  */
 
-import MediaPipeLlm from "./NativeMediaPipeLlm";
+import LitertLlm from "./NativeLitertLlm";
 import {
   ModelMessage,
   LoadModelConfig,
@@ -12,11 +12,11 @@ import {
   StreamTextResult,
   LLMModel,
 } from "./LlmApi.types";
-import type { MultimodalOptions } from "./MediaPipeLlm.types";
+import type { MultimodalOptions } from "./LitertLlm.types";
 import type {
   PartialResponseEventPayload,
   ErrorResponseEventPayload,
-} from "./MediaPipeLlm.types";
+} from "./LitertLlm.types";
 
 let nextModelId = 1;
 
@@ -56,7 +56,7 @@ export async function loadModel(
     maxNumImages,
   };
 
-  const handle = await MediaPipeLlm.createModel(
+  const handle = await LitertLlm.createModel(
     modelPath,
     maxTokens,
     topK,
@@ -75,20 +75,20 @@ export async function loadModel(
     enableVisionModality,
     enableAudioModality,
     release: async () => {
-      await MediaPipeLlm.releaseModel(handle);
+      await LitertLlm.releaseModel(handle);
       modelHandles.delete(modelId);
     },
     addImage: async (imagePath: string) => {
       if (!enableVisionModality) {
         throw new Error("Vision modality is not enabled for this model");
       }
-      return MediaPipeLlm.addImageToSession(handle, imagePath);
+      return LitertLlm.addImageToSession(handle, imagePath);
     },
     addAudio: async (audioPath: string) => {
       if (!enableAudioModality) {
         throw new Error("Audio modality is not enabled for this model");
       }
-      return MediaPipeLlm.addAudioToSession(handle, audioPath);
+      return LitertLlm.addAudioToSession(handle, audioPath);
     },
   };
 }
@@ -116,7 +116,7 @@ export async function loadModelFromAsset(
     maxNumImages,
   };
 
-  const handle = await MediaPipeLlm.createModelFromAsset(
+  const handle = await LitertLlm.createModelFromAsset(
     modelName,
     maxTokens,
     topK,
@@ -135,20 +135,20 @@ export async function loadModelFromAsset(
     enableVisionModality,
     enableAudioModality,
     release: async () => {
-      await MediaPipeLlm.releaseModel(handle);
+      await LitertLlm.releaseModel(handle);
       modelHandles.delete(modelId);
     },
     addImage: async (imagePath: string) => {
       if (!enableVisionModality) {
         throw new Error("Vision modality is not enabled for this model");
       }
-      return MediaPipeLlm.addImageToSession(handle, imagePath);
+      return LitertLlm.addImageToSession(handle, imagePath);
     },
     addAudio: async (audioPath: string) => {
       if (!enableAudioModality) {
         throw new Error("Audio modality is not enabled for this model");
       }
-      return MediaPipeLlm.addAudioToSession(handle, audioPath);
+      return LitertLlm.addAudioToSession(handle, audioPath);
     },
   };
 }
@@ -183,7 +183,7 @@ async function addImageInternal(
   handle: number,
   imagePath: string
 ): Promise<boolean> {
-  return MediaPipeLlm.addImageToSession(handle, imagePath);
+  return LitertLlm.addImageToSession(handle, imagePath);
 }
 
 /**
@@ -193,7 +193,7 @@ async function addAudioInternal(
   handle: number,
   audioPath: string
 ): Promise<boolean> {
-  return MediaPipeLlm.addAudioToSession(handle, audioPath);
+  return LitertLlm.addAudioToSession(handle, audioPath);
 }
 
 /**
@@ -260,7 +260,6 @@ async function processMultimodalContent(
         }
         const imagePath = extractFilePath(part.image);
         if (imagePath) {
-          console.log("Adding image to session:", imagePath);
           await addImageInternal(handle, imagePath);
         }
       } else if (part.type === "file") {
@@ -272,14 +271,12 @@ async function processMultimodalContent(
             console.warn("Vision modality not enabled, skipping image file");
             continue;
           }
-          console.log("Adding image file to session:", filePath);
           await addImageInternal(handle, filePath);
         } else if (isAudioMediaType(part.mediaType)) {
           if (!enableAudioModality) {
             console.warn("Audio modality not enabled, skipping audio file");
             continue;
           }
-          console.log("Adding audio file to session:", filePath);
           await addAudioInternal(handle, filePath);
         }
       }
@@ -367,7 +364,7 @@ export async function generateText(
   const prompt = messagesToPrompt(messages);
 
   try {
-    const text = await MediaPipeLlm.generateResponse(
+    const text = await LitertLlm.generateResponse(
       handle,
       getNextRequestId(),
       prompt
@@ -402,7 +399,7 @@ async function* generateTextStream(
   let error: Error | null = null;
   let isDone = false;
 
-  const partialSubscription = MediaPipeLlm.addListener(
+  const partialSubscription = LitertLlm.addListener(
     "onPartialResponse",
     (ev: PartialResponseEventPayload) => {
       if (
@@ -415,7 +412,7 @@ async function* generateTextStream(
     }
   );
 
-  const errorSubscription = MediaPipeLlm.addListener(
+  const errorSubscription = LitertLlm.addListener(
     "onErrorResponse",
     (ev: ErrorResponseEventPayload) => {
       if (
@@ -438,7 +435,7 @@ async function* generateTextStream(
     });
   }
 
-  await MediaPipeLlm.generateResponseAsync(handle, requestId, prompt)
+  await LitertLlm.generateResponseAsync(handle, requestId, prompt)
     .then(() => {
       isDone = true;
       partialSubscription.remove();
@@ -492,13 +489,6 @@ export async function streamText(
 
   const prompt = messagesToPrompt(messages);
 
-  // DEBUG: Log the requestId and handle we're using
-  console.log("[streamText] Starting with:", {
-    requestId,
-    handle,
-    promptLength: prompt.length,
-  });
-
   // Shared state for both textStream and text Promise
   const queue: string[] = [];
   let accumulatedText = "";
@@ -513,46 +503,22 @@ export async function streamText(
   });
 
   // Set up listeners once (shared between stream and text accumulator)
-  const partialSubscription = MediaPipeLlm.addListener(
+  const partialSubscription = LitertLlm.addListener(
     "onPartialResponse",
     (ev: PartialResponseEventPayload) => {
-      // DEBUG: Log every event with comparison info
       const requestIdMatch = ev.requestId === requestId;
       const handleMatch = ev.handle === handle;
-      console.log("[streamText] onPartialResponse event:", {
-        eventRequestId: ev.requestId,
-        expectedRequestId: requestId,
-        requestIdMatch,
-        eventHandle: ev.handle,
-        expectedHandle: handle,
-        handleMatch,
-        responseChunk: ev.response?.substring(0, 50),
-        aborted: abortSignal?.aborted ?? false,
-      });
 
       if (requestIdMatch && handleMatch && !(abortSignal?.aborted ?? false)) {
-        console.log(
-          "[streamText] ✓ Match! Pushing to queue:",
-          ev.response?.substring(0, 30)
-        );
         queue.push(ev.response);
         accumulatedText += ev.response;
-      } else {
-        console.log("[streamText] ✗ No match, skipping chunk");
       }
     }
   );
 
-  const errorSubscription = MediaPipeLlm.addListener(
+  const errorSubscription = LitertLlm.addListener(
     "onErrorResponse",
     (ev: ErrorResponseEventPayload) => {
-      console.log("[streamText] onErrorResponse event:", {
-        eventRequestId: ev.requestId,
-        expectedRequestId: requestId,
-        eventHandle: ev.handle,
-        expectedHandle: handle,
-        error: ev.error,
-      });
       if (
         ev.requestId === requestId &&
         ev.handle === handle &&
@@ -566,33 +532,25 @@ export async function streamText(
   );
 
   const cleanup = () => {
-    console.log(
-      "[streamText] Cleanup called, accumulatedText length:",
-      accumulatedText.length
-    );
     partialSubscription.remove();
     errorSubscription.remove();
   };
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
-      console.log("[streamText] Abort signal received");
       isDone = true;
       cleanup();
     });
   }
 
-  // Start generation once (immediately when streamText is called)
-  console.log("[streamText] Calling generateResponseAsync...");
-  MediaPipeLlm.generateResponseAsync(handle, requestId, prompt)
+  // Start generation
+  LitertLlm.generateResponseAsync(handle, requestId, prompt)
     .then(() => {
-      console.log("[streamText] generateResponseAsync completed successfully");
       isDone = true;
       cleanup();
       textResolve!(accumulatedText);
     })
     .catch((err) => {
-      console.log("[streamText] generateResponseAsync failed:", err);
       isDone = true;
       cleanup();
       textReject!(err);
@@ -600,23 +558,16 @@ export async function streamText(
 
   // Create the async generator that yields from the shared queue
   async function* createTextStream(): AsyncGenerator<string, void, unknown> {
-    console.log("[streamText] createTextStream started iterating");
     while (!isDone || queue.length > 0) {
       if (queue.length > 0) {
         const chunk = queue.shift()!;
-        console.log("[streamText] Yielding chunk:", chunk?.substring(0, 30));
         yield chunk;
       } else if (isDone) {
-        console.log("[streamText] Stream done, breaking");
         break;
       } else {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
     }
-    console.log(
-      "[streamText] createTextStream finished, total accumulated:",
-      accumulatedText.length
-    );
 
     if (error) {
       throw error;
@@ -655,5 +606,5 @@ export async function streamText(
  */
 export async function stopGeneration(model: LLMModel): Promise<void> {
   const handle = getHandleFromModel(model);
-  await MediaPipeLlm.stopGeneration(handle);
+  await LitertLlm.stopGeneration(handle);
 }

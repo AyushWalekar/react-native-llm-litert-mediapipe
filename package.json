@@ -1,12 +1,12 @@
 {
   "name": "react-native-llm-litert-mediapipe",
   "version": "1.0.0",
-  "description": "React Native module for Google MediaPipe LLM inference (Gemma 3n)",
-  "main": "lib/index-bare.js",
-  "module": "lib/index-bare.js",
-  "types": "lib/index-bare.d.ts",
-  "react-native": "src/index-bare.ts",
-  "source": "src/index-bare.ts",
+  "description": "React Native module for on-device LLM inference using LiteRT/MediaPipe (Gemma 3n)",
+  "main": "lib/index.js",
+  "module": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
   "files": [
     "src",
     "lib",
@@ -20,7 +20,7 @@
     "!**/__mocks__"
   ],
   "scripts": {
-    "build": "tsc --project tsconfig.bare.json",
+    "build": "tsc --project tsconfig.json",
     "clean": "rm -rf lib",
     "lint": "eslint \"src/**/*.{js,ts,tsx}\"",
     "typecheck": "tsc --noEmit",

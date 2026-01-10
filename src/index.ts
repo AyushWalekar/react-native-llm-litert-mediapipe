@@ -1,9 +1,26 @@
 /**
  * react-native-llm-litert-mediapipe
- * Bare React Native module for MediaPipe LLM inference
+ * React Native module for LiteRT/MediaPipe LLM inference
  *
- * This module now uses the bare RN implementation for all platforms.
- * The Expo-specific code has been removed.
+ * Clean API for bare React Native (no Expo required)
  */
-export * from "./index-bare";
-export { default } from "./index-bare";
+
+// Main hook and module exports
+export { useLlm, LitertLlm, default } from "./LitertLlmModule";
+
+// Functional API exports
+export {
+  loadModel,
+  loadModelFromAsset,
+  releaseModel,
+  generateText,
+  streamText,
+  stopGeneration,
+} from "./LlmApi";
+
+// Type exports
+export * from "./LlmApi.types";
+export * from "./LitertLlm.types";
+
+// Model Manager for download management
+export { ModelManager, modelManager, type ModelInfo } from "./ModelManager";

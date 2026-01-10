@@ -1,16 +1,16 @@
 /**
- * Native MediaPipe LLM Bridge for bare React Native (no Expo)
+ * Native LiteRT LLM Bridge for bare React Native (no Expo)
  * Uses standard NativeModules and NativeEventEmitter
  */
 import { NativeModules, NativeEventEmitter, Platform } from "react-native";
 
 import type {
-  ExpoLlmMediapipeModule as NativeModuleType,
-  ExpoLlmMediapipeModuleEvents,
+  LitertLlmModuleInterface,
+  LitertLlmModuleEvents,
   NativeModuleSubscription,
   DownloadOptions,
   MultimodalOptions,
-} from "./MediaPipeLlm.types";
+} from "./LitertLlm.types";
 
 const LINKING_ERROR =
   `The package 'react-native-llm-litert-mediapipe' doesn't seem to be linked. Make sure: \n\n` +
@@ -18,8 +18,8 @@ const LINKING_ERROR =
   "- You rebuilt the app after installing the package\n" +
   "- You are not using Expo Go\n";
 
-// Get the native module
-const MediaPipeLlmModule = NativeModules.MediaPipeLlm
+// Get the native module - supports both old and new naming
+const LitertLlmNative = NativeModules.MediaPipeLlm
   ? NativeModules.MediaPipeLlm
   : new Proxy(
       {},
@@ -31,13 +31,13 @@ const MediaPipeLlmModule = NativeModules.MediaPipeLlm
     );
 
 // Create event emitter
-const eventEmitter = new NativeEventEmitter(MediaPipeLlmModule);
+const eventEmitter = new NativeEventEmitter(LitertLlmNative);
 
 /**
- * Wrapper module that provides the same API as the Expo module
- * but uses standard React Native NativeModules and NativeEventEmitter
+ * Wrapper module that provides the native API
+ * Uses standard React Native NativeModules and NativeEventEmitter
  */
-const MediaPipeLlm: NativeModuleType = {
+const LitertLlm: LitertLlmModuleInterface = {
   // Model creation methods
   createModel: (
     modelPath: string,
@@ -47,7 +47,7 @@ const MediaPipeLlm: NativeModuleType = {
     randomSeed: number,
     options?: MultimodalOptions
   ): Promise<number> => {
-    return MediaPipeLlmModule.createModel(
+    return LitertLlmNative.createModel(
       modelPath,
       maxTokens,
       topK,
@@ -65,7 +65,7 @@ const MediaPipeLlm: NativeModuleType = {
     randomSeed: number,
     options?: MultimodalOptions
   ): Promise<number> => {
-    return MediaPipeLlmModule.createModelFromAsset(
+    return LitertLlmNative.createModelFromAsset(
       modelName,
       maxTokens,
       topK,
@@ -76,7 +76,7 @@ const MediaPipeLlm: NativeModuleType = {
   },
 
   releaseModel: (handle: number): Promise<boolean> => {
-    return MediaPipeLlmModule.releaseModel(handle);
+    return LitertLlmNative.releaseModel(handle);
   },
 
   // Generation methods
@@ -85,7 +85,7 @@ const MediaPipeLlm: NativeModuleType = {
     requestId: number,
     prompt: string
   ): Promise<string> => {
-    return MediaPipeLlmModule.generateResponse(handle, requestId, prompt);
+    return LitertLlmNative.generateResponse(handle, requestId, prompt);
   },
 
   generateResponseAsync: (
@@ -93,20 +93,20 @@ const MediaPipeLlm: NativeModuleType = {
     requestId: number,
     prompt: string
   ): Promise<boolean> => {
-    return MediaPipeLlmModule.generateResponseAsync(handle, requestId, prompt);
+    return LitertLlmNative.generateResponseAsync(handle, requestId, prompt);
   },
 
   // Download management methods
   isModelDownloaded: (modelName: string): Promise<boolean> => {
-    return MediaPipeLlmModule.isModelDownloaded(modelName);
+    return LitertLlmNative.isModelDownloaded(modelName);
   },
 
   getDownloadedModels: (): Promise<string[]> => {
-    return MediaPipeLlmModule.getDownloadedModels();
+    return LitertLlmNative.getDownloadedModels();
   },
 
   deleteDownloadedModel: (modelName: string): Promise<boolean> => {
-    return MediaPipeLlmModule.deleteDownloadedModel(modelName);
+    return LitertLlmNative.deleteDownloadedModel(modelName);
   },
 
   downloadModel: (
@@ -114,11 +114,11 @@ const MediaPipeLlm: NativeModuleType = {
     modelName: string,
     options?: DownloadOptions
   ): Promise<boolean> => {
-    return MediaPipeLlmModule.downloadModel(url, modelName, options ?? {});
+    return LitertLlmNative.downloadModel(url, modelName, options ?? {});
   },
 
   cancelDownload: (modelName: string): Promise<boolean> => {
-    return MediaPipeLlmModule.cancelDownload(modelName);
+    return LitertLlmNative.cancelDownload(modelName);
   },
 
   createModelFromDownloaded: (
@@ -129,7 +129,7 @@ const MediaPipeLlm: NativeModuleType = {
     randomSeed?: number,
     options?: MultimodalOptions
   ): Promise<number> => {
-    return MediaPipeLlmModule.createModelFromDownloaded(
+    return LitertLlmNative.createModelFromDownloaded(
       modelName,
       maxTokens ?? 1024,
       topK ?? 40,
@@ -141,21 +141,21 @@ const MediaPipeLlm: NativeModuleType = {
 
   // Multimodal methods
   addImageToSession: (handle: number, imagePath: string): Promise<boolean> => {
-    return MediaPipeLlmModule.addImageToSession(handle, imagePath);
+    return LitertLlmNative.addImageToSession(handle, imagePath);
   },
 
   addAudioToSession: (handle: number, audioPath: string): Promise<boolean> => {
-    return MediaPipeLlmModule.addAudioToSession(handle, audioPath);
+    return LitertLlmNative.addAudioToSession(handle, audioPath);
   },
 
   stopGeneration: (handle: number): Promise<boolean> => {
-    return MediaPipeLlmModule.stopGeneration(handle);
+    return LitertLlmNative.stopGeneration(handle);
   },
 
   // Event methods - adapted to use NativeEventEmitter
-  addListener: <EventName extends keyof ExpoLlmMediapipeModuleEvents>(
+  addListener: <EventName extends keyof LitertLlmModuleEvents>(
     eventName: EventName,
-    listener: ExpoLlmMediapipeModuleEvents[EventName]
+    listener: LitertLlmModuleEvents[EventName]
   ): NativeModuleSubscription => {
     const subscription = eventEmitter.addListener(
       eventName as string,
@@ -166,9 +166,9 @@ const MediaPipeLlm: NativeModuleType = {
     };
   },
 
-  removeAllListeners: (event: keyof ExpoLlmMediapipeModuleEvents): void => {
+  removeAllListeners: (event: keyof LitertLlmModuleEvents): void => {
     eventEmitter.removeAllListeners(event as string);
   },
 };
 
-export default MediaPipeLlm;
+export default LitertLlm;

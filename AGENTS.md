@@ -1,17 +1,15 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Library source lives in `src/` (TypeScript wrappers, model manager, entry exports). Generated JS/typedefs land in `build/` after the module build.
+- Library source lives in `src/` (TypeScript wrappers, model manager, entry exports). Generated JS/typedefs land in `lib/` after the module build.
 - Native projects live in `android/` and `ios/`; keep platform-specific tweaks isolated to those folders.
-- Expo config and plugin hooks are in `app.plugin.js`, `expo-module.config.json`, and `plugins/`.
-- Documentation assets and site content sit in `docs/` and `assets/`. The demo app is in `example/` (with its own `src/`, `assets/`, and platform folders) for end-to-end validation.
+- Documentation assets and site content sit in `docs/` and `assets/`. The demo app is in `example-bare/` for end-to-end validation.
 
 ## Build, Test, and Development Commands
-- `npm run build` — builds the module via `expo-module-scripts`, emitting `build/`.
+- `npm run build` — builds the module via TypeScript, emitting `lib/`.
 - `npm run lint` — runs the configured lint rules; fix warnings before opening a PR.
-- `npm test` — executes the expo-module test suite (Jest under the hood); ensure it passes locally.
 - `npm run clean` — removes generated artifacts.
-- Example app: `npm install && npm run start` (or `npm run android`/`ios`) from `example/` to verify integration.
+- Example app: `npm install && npm run start` (or `npm run android`/`ios`) from `example-bare/` to verify integration.
 
 ## Coding Style & Naming Conventions
 - TypeScript-first; prefer explicit return types on public APIs. Use 2-space indentation and trailing commas where sensible.
@@ -33,11 +31,18 @@
 ## Security & Configuration Tips
 - Do not commit model binaries or large assets; reference download URLs instead.
 - Keep API keys and secrets out of the repo; rely on environment configs when needed.
-- Confirm Expo SDK and platform minimums (iOS 14+, Android 24) when adding dependencies or APIs.
+- Confirm platform minimums (iOS 14+, Android SDK 24) when adding dependencies or APIs.
 
-## Recent Multimodal Init & Flow
-- Native module now supports multimodal GraphOptions: `createModelFromDownloaded` accepts an `options` map (`enableVisionModality`, `enableAudioModality`, `maxNumImages`), and sessions are reused so image/audio context persists across prompts.
-- New helpers `addImageToSession`/`addAudioToSession` are exposed through the TS hooks (`useLLM`/`useLLMDownloadable` return `addImage`/`addAudio`); call them after loading the model and before `generateResponse`/`generateStreamingResponse`.
-- Android requires `tasks-vision:0.10.29` for `MPImage`/`BitmapImageBuilder`; audio expects mono WAV bytes. Vision/audio flags default to `false`, so opt in per model.
-- Example app boots into the Multimodal demo using Gemma 3n E4B (`MODEL_URL`/`MODEL_NAME` in `MultimodalDemoScreen.tsx`); it relies on `expo-image-picker`, `expo-av`, `expo-document-picker`, and `expo-file-system` for gathering media.
-- Flow: download/load model → set `{ enableVisionModality: true, enableAudioModality: true }` if needed → `addImage`/`addAudio` with file URIs → invoke generate (session is kept to retain multimodal context).
+## API Overview
+- Main hook: `useLlm` - React hook for model lifecycle and generation
+- Functional API: `loadModel`, `loadModelFromAsset`, `generateText`, `streamText`, `releaseModel`, `stopGeneration`
+- Model Manager: `modelManager` singleton for download management
+- Native module: `LitertLlm` for direct native bridge access
+
+## Multimodal Support (Android only)
+- Native module supports multimodal options: `enableVisionModality`, `enableAudioModality`, `maxNumImages`
+- Multimodal content is automatically processed from `ModelMessage` arrays
+- Image/audio content types are detected via `ImagePart` and `FilePart` in message content
+- Android requires `tasks-vision:0.10.29` for image support; audio expects mono WAV format
+- Vision/audio flags default to `false`, so opt in per model configuration
+

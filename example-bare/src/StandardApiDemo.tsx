@@ -1,9 +1,9 @@
 /**
- * Example demonstrating new standardized LLM API
+ * Example demonstrating the LiteRT LLM API
  * AI-SDK compatible interface with ModelMessage format
  * Includes multimodal support (image and audio input)
  */
-import React, { useState, useCallback, useRef } from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -22,16 +22,14 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 
 import {
-  useStandardLLM,
-  generateText,
-  streamText,
+  useLlm,
   type ModelMessage,
   type TextPart,
   type ImagePart,
   type FilePart,
   type ContentPart,
 } from 'react-native-llm-litert-mediapipe';
-import { launchImageLibrary, Asset } from 'react-native-image-picker';
+import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import * as AudioRecorder from './AudioRecorderJS';
 import RNFS from 'react-native-fs';
 
@@ -45,9 +43,10 @@ const THEME = {
   oColor: '#e84393',
 };
 
-const PRESET_MODEL_PATH = Platform.OS === 'android'
-  ? `${RNFS.DocumentDirectoryPath}/litert/gemma-3n-E4B-it-int4.litertlm`
-  : '';
+const PRESET_MODEL_PATH =
+  Platform.OS === 'android'
+    ? `${RNFS.DocumentDirectoryPath}/litert/gemma-3n-E4B-it-int4.litertlm`
+    : '';
 
 export default function StandardApiDemo() {
   const [prompt, setPrompt] = useState('');
@@ -61,7 +60,7 @@ export default function StandardApiDemo() {
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [showMultimodalSection, setShowMultimodalSection] = useState(false);
 
-  const standardLlm = useStandardLLM({
+  const llm = useLlm({
     type: 'file',
     path: PRESET_MODEL_PATH,
     config: {
@@ -74,7 +73,17 @@ export default function StandardApiDemo() {
     },
   });
 
-  const { model, isLoaded, isLoading, error, loadModel, unloadModel, generate, stream, cancel } = standardLlm;
+  const {
+    model,
+    isLoaded,
+    isLoading,
+    error,
+    loadModel,
+    unloadModel,
+    generate,
+    stream,
+    cancel,
+  } = llm;
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -93,7 +102,10 @@ export default function StandardApiDemo() {
       await loadModel();
       Alert.alert('Success', 'Model loaded successfully');
     } catch (e) {
-      Alert.alert('Error', `Failed to load model: ${e instanceof Error ? e.message : String(e)}`);
+      Alert.alert(
+        'Error',
+        `Failed to load model: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }, [loadModel]);
 
@@ -101,7 +113,10 @@ export default function StandardApiDemo() {
     if (!prompt.trim() || !model) return;
 
     if (Platform.OS === 'ios' && (imageUri || audioUri)) {
-      Alert.alert('Not Supported', 'Multimodal input is only supported on Android.');
+      Alert.alert(
+        'Not Supported',
+        'Multimodal input is only supported on Android.',
+      );
       return;
     }
 
@@ -112,7 +127,9 @@ export default function StandardApiDemo() {
       const userContent: ContentPart[] = [];
 
       if (imageUri) {
-        const imagePath = imageUri.startsWith('file://') ? imageUri.replace('file://', '') : imageUri;
+        const imagePath = imageUri.startsWith('file://')
+          ? imageUri.replace('file://', '')
+          : imageUri;
         userContent.push({
           type: 'image',
           image: imagePath,
@@ -121,7 +138,9 @@ export default function StandardApiDemo() {
       }
 
       if (audioUri) {
-        const audioPath = audioUri.startsWith('file://') ? audioUri.replace('file://', '') : audioUri;
+        const audioPath = audioUri.startsWith('file://')
+          ? audioUri.replace('file://', '')
+          : audioUri;
         userContent.push({
           type: 'file',
           data: audioPath,
@@ -135,14 +154,17 @@ export default function StandardApiDemo() {
       } as TextPart);
 
       const messages: ModelMessage[] = [
-        { role: 'system', content: 'You are a helpful AI assistant.' },
-        { role: 'user', content: userContent },
+        {role: 'system', content: 'You are a helpful AI assistant.'},
+        {role: 'user', content: userContent},
       ];
 
       const result = await generate(messages);
       setResponse(result.text);
     } catch (e) {
-      Alert.alert('Error', `Generation failed: ${e instanceof Error ? e.message : String(e)}`);
+      Alert.alert(
+        'Error',
+        `Generation failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -152,7 +174,10 @@ export default function StandardApiDemo() {
     if (!prompt.trim() || !model) return;
 
     if (Platform.OS === 'ios' && (imageUri || audioUri)) {
-      Alert.alert('Not Supported', 'Multimodal input is only supported on Android.');
+      Alert.alert(
+        'Not Supported',
+        'Multimodal input is only supported on Android.',
+      );
       return;
     }
 
@@ -163,7 +188,9 @@ export default function StandardApiDemo() {
       const userContent: ContentPart[] = [];
 
       if (imageUri) {
-        const imagePath = imageUri.startsWith('file://') ? imageUri.replace('file://', '') : imageUri;
+        const imagePath = imageUri.startsWith('file://')
+          ? imageUri.replace('file://', '')
+          : imageUri;
         userContent.push({
           type: 'image',
           image: imagePath,
@@ -172,7 +199,9 @@ export default function StandardApiDemo() {
       }
 
       if (audioUri) {
-        const audioPath = audioUri.startsWith('file://') ? audioUri.replace('file://', '') : audioUri;
+        const audioPath = audioUri.startsWith('file://')
+          ? audioUri.replace('file://', '')
+          : audioUri;
         userContent.push({
           type: 'file',
           data: audioPath,
@@ -186,17 +215,20 @@ export default function StandardApiDemo() {
       } as TextPart);
 
       const messages: ModelMessage[] = [
-        { role: 'system', content: 'You are a helpful AI assistant.' },
-        { role: 'user', content: userContent },
+        {role: 'system', content: 'You are a helpful AI assistant.'},
+        {role: 'user', content: userContent},
       ];
 
       const result = await stream(messages);
 
       for await (const textPart of result.textStream) {
-        setResponse((prev) => prev + textPart);
+        setResponse(prev => prev + textPart);
       }
     } catch (e) {
-      Alert.alert('Error', `Streaming failed: ${e instanceof Error ? e.message : String(e)}`);
+      Alert.alert(
+        'Error',
+        `Streaming failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       setIsStreaming(false);
     }
@@ -217,7 +249,10 @@ export default function StandardApiDemo() {
       await unloadModel();
       Alert.alert('Success', 'Model unloaded successfully');
     } catch (e) {
-      Alert.alert('Error', `Failed to unload model: ${e instanceof Error ? e.message : String(e)}`);
+      Alert.alert(
+        'Error',
+        `Failed to unload model: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }, [unloadModel]);
 
@@ -234,7 +269,10 @@ export default function StandardApiDemo() {
       }
 
       if (result.errorCode) {
-        Alert.alert('Image Picker Error', result.errorMessage || 'Unknown error');
+        Alert.alert(
+          'Image Picker Error',
+          result.errorMessage || 'Unknown error',
+        );
         return;
       }
 
@@ -260,14 +298,18 @@ export default function StandardApiDemo() {
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
             title: 'Audio Recording Permission',
-            message: 'This app needs access to your microphone to record audio.',
+            message:
+              'This app needs access to your microphone to record audio.',
             buttonNeutral: 'Ask Me Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
-          }
+          },
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert('Permission Denied', 'Audio recording permission is required.');
+          Alert.alert(
+            'Permission Denied',
+            'Audio recording permission is required.',
+          );
           return;
         }
       }
@@ -319,38 +361,51 @@ export default function StandardApiDemo() {
   };
 
   return (
-    <LinearGradient colors={THEME.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.container}>
+    <LinearGradient
+      colors={THEME.gradient}
+      start={{x: 0, y: 0}}
+      end={{x: 1, y: 1}}
+      style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
           ref={scrollViewRef}
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+          keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Text style={styles.title}>AI-SDK Gemma-3n</Text>
           </View>
 
           {/* <View style={[styles.glassCard, styles.statusCard]}> */}
-            {/* <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} /> */}
-            {/* <Text style={styles.statusText}>{getStatusText()}</Text> */}
-            {error && <Text style={styles.errorText}>{error}</Text>}
+          {/* <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} /> */}
+          {/* <Text style={styles.statusText}>{getStatusText()}</Text> */}
+          {error && <Text style={styles.errorText}>{error}</Text>}
           {/* </View> */}
 
           <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[isLoaded ? styles.outlineButton : styles.primaryButton]}
               onPress={handleLoadModel}
-              disabled={isLoaded}
-            >
-              <Text style={isLoaded ? styles.outlineButtonText : styles.primaryButtonText}>Load Model</Text>
+              disabled={isLoaded}>
+              <Text
+                style={
+                  isLoaded ? styles.outlineButtonText : styles.primaryButtonText
+                }>
+                Load Model
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[isLoaded ? styles.primaryButton : styles.disabledButton]}
               onPress={handleUnloadModel}
-              disabled={!isLoaded}
-            >
-              <Text style={isLoaded ? styles.primaryButtonText : styles.disabledButtonText}>Unload Model</Text>
+              disabled={!isLoaded}>
+              <Text
+                style={
+                  isLoaded
+                    ? styles.primaryButtonText
+                    : styles.disabledButtonText
+                }>
+                Unload Model
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -358,15 +413,24 @@ export default function StandardApiDemo() {
             <>
               <TouchableOpacity
                 style={[styles.glassCard, styles.collapsibleHeader]}
-                onPress={() => setShowMultimodalSection(!showMultimodalSection)}
-              >
+                onPress={() =>
+                  setShowMultimodalSection(!showMultimodalSection)
+                }>
                 <View style={styles.collapsibleHeaderContent}>
                   <Text style={styles.collapsibleTitle}>Multimodal Input</Text>
                   {(imageUri || audioUri) && (
-                    <Text style={[styles.collapsibleStatus, { color: THEME.secondaryColor }]}>Active</Text>
+                    <Text
+                      style={[
+                        styles.collapsibleStatus,
+                        {color: THEME.secondaryColor},
+                      ]}>
+                      Active
+                    </Text>
                   )}
                 </View>
-                <Text style={styles.collapsibleArrow}>{showMultimodalSection ? '▼' : '▶'}</Text>
+                <Text style={styles.collapsibleArrow}>
+                  {showMultimodalSection ? '▼' : '▶'}
+                </Text>
               </TouchableOpacity>
 
               {showMultimodalSection && (
@@ -374,23 +438,38 @@ export default function StandardApiDemo() {
                   <View style={[styles.glassCard, styles.mediaSection]}>
                     <View style={styles.mediaRow}>
                       <TouchableOpacity
-                        style={[styles.mediaButton, imageUri && styles.mediaButtonActive]}
-                        onPress={handlePickImage}
-                      >
+                        style={[
+                          styles.mediaButton,
+                          imageUri && styles.mediaButtonActive,
+                        ]}
+                        onPress={handlePickImage}>
                         <Text style={styles.mediaIcon}>📷</Text>
-                        <Text style={[styles.mediaButtonText, { color: THEME.textColor }]}>
+                        <Text
+                          style={[
+                            styles.mediaButtonText,
+                            {color: THEME.textColor},
+                          ]}>
                           {imageUri ? 'Change' : 'Add Image'}
                         </Text>
                       </TouchableOpacity>
                       {imageUri && (
-                        <TouchableOpacity style={[styles.removeButton, { backgroundColor: THEME.oColor }]} onPress={handleClearImage}>
+                        <TouchableOpacity
+                          style={[
+                            styles.removeButton,
+                            {backgroundColor: THEME.oColor},
+                          ]}
+                          onPress={handleClearImage}>
                           <Text style={styles.removeButtonText}>✕</Text>
                         </TouchableOpacity>
                       )}
                     </View>
 
                     {imageUri && (
-                      <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                      <Image
+                        source={{uri: imageUri}}
+                        style={styles.imagePreview}
+                        resizeMode="cover"
+                      />
                     )}
 
                     <View style={styles.mediaRow}>
@@ -400,22 +479,41 @@ export default function StandardApiDemo() {
                           isRecording && styles.recordingButton,
                           audioUri && styles.mediaButtonActive,
                         ]}
-                        onPress={isRecording ? handleStopRecording : handleStartRecording}
-                      >
+                        onPress={
+                          isRecording
+                            ? handleStopRecording
+                            : handleStartRecording
+                        }>
                         <Text style={styles.mediaIcon}>🎤</Text>
-                        <Text style={[styles.mediaButtonText, { color: THEME.textColor }]}>
-                          {isRecording ? 'Stop' : audioUri ? 'Re-record' : 'Record'}
+                        <Text
+                          style={[
+                            styles.mediaButtonText,
+                            {color: THEME.textColor},
+                          ]}>
+                          {isRecording
+                            ? 'Stop'
+                            : audioUri
+                            ? 'Re-record'
+                            : 'Record'}
                         </Text>
                       </TouchableOpacity>
                       {audioUri && !isRecording && (
-                        <TouchableOpacity style={[styles.removeButton, { backgroundColor: THEME.oColor }]} onPress={handleClearAudio}>
+                        <TouchableOpacity
+                          style={[
+                            styles.removeButton,
+                            {backgroundColor: THEME.oColor},
+                          ]}
+                          onPress={handleClearAudio}>
                           <Text style={styles.removeButtonText}>✕</Text>
                         </TouchableOpacity>
                       )}
                     </View>
 
                     {audioDuration !== null && (
-                      <Text style={[styles.audioInfo, { color: THEME.textColor }]}>Duration: {audioDuration.toFixed(1)}s</Text>
+                      <Text
+                        style={[styles.audioInfo, {color: THEME.textColor}]}>
+                        Duration: {audioDuration.toFixed(1)}s
+                      </Text>
                     )}
                   </View>
                 </View>
@@ -423,9 +521,11 @@ export default function StandardApiDemo() {
             </>
           )}
 
-          <Animated.View style={{ opacity: fadeAnim }}>
+          <Animated.View style={{opacity: fadeAnim}}>
             <View style={[styles.glassCard, styles.promptSection]}>
-              <Text style={[styles.inputLabel, { color: THEME.textColor }]}>Prompt</Text>
+              <Text style={[styles.inputLabel, {color: THEME.textColor}]}>
+                Prompt
+              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="Type your message here..."
@@ -434,7 +534,9 @@ export default function StandardApiDemo() {
                 onChangeText={setPrompt}
                 multiline
                 editable={isLoaded}
-                onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                onFocus={() =>
+                  scrollViewRef.current?.scrollToEnd({animated: true})
+                }
               />
             </View>
 
@@ -442,12 +544,17 @@ export default function StandardApiDemo() {
               <TouchableOpacity
                 style={[
                   styles.generateButton,
-                  { backgroundColor: THEME.primaryColor },
-                  (!isLoaded || isGenerating || isStreaming || !prompt.trim()) && styles.generateButtonDisabled,
+                  {backgroundColor: THEME.primaryColor},
+                  (!isLoaded ||
+                    isGenerating ||
+                    isStreaming ||
+                    !prompt.trim()) &&
+                    styles.generateButtonDisabled,
                 ]}
                 onPress={handleGenerateText}
-                disabled={!isLoaded || isGenerating || isStreaming || !prompt.trim()}
-              >
+                disabled={
+                  !isLoaded || isGenerating || isStreaming || !prompt.trim()
+                }>
                 {isGenerating ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
@@ -458,12 +565,17 @@ export default function StandardApiDemo() {
               <TouchableOpacity
                 style={[
                   styles.streamButton,
-                  { backgroundColor: THEME.secondaryColor },
-                  (!isLoaded || isGenerating || isStreaming || !prompt.trim()) && styles.generateButtonDisabled,
+                  {backgroundColor: THEME.secondaryColor},
+                  (!isLoaded ||
+                    isGenerating ||
+                    isStreaming ||
+                    !prompt.trim()) &&
+                    styles.generateButtonDisabled,
                 ]}
                 onPress={handleStreamText}
-                disabled={!isLoaded || isGenerating || isStreaming || !prompt.trim()}
-              >
+                disabled={
+                  !isLoaded || isGenerating || isStreaming || !prompt.trim()
+                }>
                 {isStreaming ? (
                   <ActivityIndicator color="#f89393ff" />
                 ) : (
@@ -474,20 +586,23 @@ export default function StandardApiDemo() {
               <TouchableOpacity
                 style={[
                   styles.cancelButton,
-                  { backgroundColor: THEME.oColor },
+                  {backgroundColor: THEME.oColor},
                   !(isGenerating || isStreaming) && styles.cancelButtonDisabled,
                 ]}
                 onPress={handleCancel}
-                disabled={!isGenerating && !isStreaming}
-              >
+                disabled={!isGenerating && !isStreaming}>
                 <Text style={styles.cancelButtonText}>Stop</Text>
               </TouchableOpacity>
             </View>
 
             <View style={[styles.glassCard, styles.responseSection]}>
-              <Text style={[styles.responseLabel, { color: THEME.textColor }]}>Response</Text>
+              <Text style={[styles.responseLabel, {color: THEME.textColor}]}>
+                Response
+              </Text>
               <View style={styles.responseCard}>
-                <Text style={[styles.responseText, { color: THEME.textColor }]}>{response || 'AI response will appear here...'}</Text>
+                <Text style={[styles.responseText, {color: THEME.textColor}]}>
+                  {response || 'AI response will appear here...'}
+                </Text>
               </View>
             </View>
           </Animated.View>
@@ -529,7 +644,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.5)',
     shadowColor: 'rgba(31, 38, 135, 0.15)',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: {width: 0, height: 8},
     shadowOpacity: 1,
     shadowRadius: 32,
     elevation: 8,
