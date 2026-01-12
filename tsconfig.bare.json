@@ -16,14 +16,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "lib",
-    "build",
-    "example",
-    "example-bare"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "lib", "build", "example", "example-bare"]
 }

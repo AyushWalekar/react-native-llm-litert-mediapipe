@@ -16,9 +16,39 @@ import type { MultimodalOptions } from "./LitertLlm.types";
 import type {
   PartialResponseEventPayload,
   ErrorResponseEventPayload,
+  LoggingEventPayload,
 } from "./LitertLlm.types";
 
 let nextModelId = 1;
+
+const LOG_PREFIX = "[LlmApi]";
+
+function log(message: string, ...args: unknown[]) {
+  console.log(`${LOG_PREFIX} ${message}`, ...args);
+}
+
+function logError(message: string, error?: unknown) {
+  console.error(`${LOG_PREFIX} ${message}`, error || "");
+}
+
+// Set up native logging listener - captures logs from Android/iOS native code
+let loggingSubscription: { remove: () => void } | null = null;
+
+function enableNativeLogging() {
+  if (loggingSubscription) return;
+
+  try {
+    loggingSubscription = LitertLlm.addListener("logging", (ev: LoggingEventPayload) => {
+      const prefix = ev.handle !== undefined ? `[Native][Handle:${ev.handle}] ` : "[Native] ";
+      console.log(`${LOG_PREFIX} ${prefix}${ev.message}`);
+    });
+    log("Native logging enabled");
+  } catch (error) {
+    logError("Failed to enable native logging", error);
+  }
+}
+
+enableNativeLogging();
 
 // Counter for request IDs - must fit in 32-bit signed integer range
 let nextRequestId = 1;
@@ -40,6 +70,8 @@ export async function loadModel(
   modelPath: string,
   config: LoadModelConfig = {}
 ): Promise<LLMModel> {
+  log(`loadModel called - path: ${modelPath}, config:`, config);
+
   const {
     maxTokens = 1024,
     topK = 40,
@@ -56,41 +88,52 @@ export async function loadModel(
     maxNumImages,
   };
 
-  const handle = await LitertLlm.createModel(
-    modelPath,
-    maxTokens,
-    topK,
-    temperature,
-    randomSeed,
-    multimodalOptions
-  );
+  try {
+    const handle = await LitertLlm.createModel(
+      modelPath,
+      maxTokens,
+      topK,
+      temperature,
+      randomSeed,
+      multimodalOptions
+    );
 
-  const modelId = `model-${nextModelId++}`;
-  modelHandles.set(modelId, handle);
+    const modelId = `model-${nextModelId++}`;
+    modelHandles.set(modelId, handle);
 
-  return {
-    id: modelId,
-    handle,
-    isLoaded: true,
-    enableVisionModality,
-    enableAudioModality,
-    release: async () => {
-      await LitertLlm.releaseModel(handle);
-      modelHandles.delete(modelId);
-    },
-    addImage: async (imagePath: string) => {
-      if (!enableVisionModality) {
-        throw new Error("Vision modality is not enabled for this model");
-      }
-      return LitertLlm.addImageToSession(handle, imagePath);
-    },
-    addAudio: async (audioPath: string) => {
-      if (!enableAudioModality) {
-        throw new Error("Audio modality is not enabled for this model");
-      }
-      return LitertLlm.addAudioToSession(handle, audioPath);
-    },
-  };
+    log(`loadModel success - modelId: ${modelId}, handle: ${handle}`);
+
+    return {
+      id: modelId,
+      handle,
+      isLoaded: true,
+      enableVisionModality,
+      enableAudioModality,
+      release: async () => {
+        log(`releaseModel called - modelId: ${modelId}, handle: ${handle}`);
+        await LitertLlm.releaseModel(handle);
+        modelHandles.delete(modelId);
+        log(`releaseModel success - modelId: ${modelId}`);
+      },
+      addImage: async (imagePath: string) => {
+        log(`addImage called - modelId: ${modelId}, path: ${imagePath}`);
+        if (!enableVisionModality) {
+          throw new Error("Vision modality is not enabled for this model");
+        }
+        return LitertLlm.addImageToSession(handle, imagePath);
+      },
+      addAudio: async (audioPath: string) => {
+        log(`addAudio called - modelId: ${modelId}, path: ${audioPath}`);
+        if (!enableAudioModality) {
+          throw new Error("Audio modality is not enabled for this model");
+        }
+        return LitertLlm.addAudioToSession(handle, audioPath);
+      },
+    };
+  } catch (error) {
+    logError(`loadModel failed - path: ${modelPath}`, error);
+    throw error;
+  }
 }
 
 /**
@@ -100,6 +143,8 @@ export async function loadModelFromAsset(
   modelName: string,
   config: LoadModelConfig = {}
 ): Promise<LLMModel> {
+  log(`loadModelFromAsset called - modelName: ${modelName}, config:`, config);
+
   const {
     maxTokens = 1024,
     topK = 40,
@@ -116,48 +161,66 @@ export async function loadModelFromAsset(
     maxNumImages,
   };
 
-  const handle = await LitertLlm.createModelFromAsset(
-    modelName,
-    maxTokens,
-    topK,
-    temperature,
-    randomSeed,
-    multimodalOptions
-  );
+  try {
+    const handle = await LitertLlm.createModelFromAsset(
+      modelName,
+      maxTokens,
+      topK,
+      temperature,
+      randomSeed,
+      multimodalOptions
+    );
 
-  const modelId = `model-${nextModelId++}`;
-  modelHandles.set(modelId, handle);
+    const modelId = `model-${nextModelId++}`;
+    modelHandles.set(modelId, handle);
 
-  return {
-    id: modelId,
-    handle,
-    isLoaded: true,
-    enableVisionModality,
-    enableAudioModality,
-    release: async () => {
-      await LitertLlm.releaseModel(handle);
-      modelHandles.delete(modelId);
-    },
-    addImage: async (imagePath: string) => {
-      if (!enableVisionModality) {
-        throw new Error("Vision modality is not enabled for this model");
-      }
-      return LitertLlm.addImageToSession(handle, imagePath);
-    },
-    addAudio: async (audioPath: string) => {
-      if (!enableAudioModality) {
-        throw new Error("Audio modality is not enabled for this model");
-      }
-      return LitertLlm.addAudioToSession(handle, audioPath);
-    },
-  };
+    log(`loadModelFromAsset success - modelId: ${modelId}, handle: ${handle}`);
+
+    return {
+      id: modelId,
+      handle,
+      isLoaded: true,
+      enableVisionModality,
+      enableAudioModality,
+      release: async () => {
+        log(`releaseModel called - modelId: ${modelId}, handle: ${handle}`);
+        await LitertLlm.releaseModel(handle);
+        modelHandles.delete(modelId);
+        log(`releaseModel success - modelId: ${modelId}`);
+      },
+      addImage: async (imagePath: string) => {
+        log(`addImage called - modelId: ${modelId}, path: ${imagePath}`);
+        if (!enableVisionModality) {
+          throw new Error("Vision modality is not enabled for this model");
+        }
+        return LitertLlm.addImageToSession(handle, imagePath);
+      },
+      addAudio: async (audioPath: string) => {
+        log(`addAudio called - modelId: ${modelId}, path: ${audioPath}`);
+        if (!enableAudioModality) {
+          throw new Error("Audio modality is not enabled for this model");
+        }
+        return LitertLlm.addAudioToSession(handle, audioPath);
+      },
+    };
+  } catch (error) {
+    logError(`loadModelFromAsset failed - modelName: ${modelName}`, error);
+    throw error;
+  }
 }
 
 /**
  * Release a loaded model
  */
 export async function releaseModel(model: LLMModel): Promise<void> {
-  await model.release();
+  log(`releaseModel called - modelId: ${model.id}`);
+  try {
+    await model.release();
+    log(`releaseModel success - modelId: ${model.id}`);
+  } catch (error) {
+    logError(`releaseModel failed - modelId: ${model.id}`, error);
+    throw error;
+  }
 }
 
 /**
@@ -183,17 +246,30 @@ async function addImageInternal(
   handle: number,
   imagePath: string
 ): Promise<boolean> {
-  return LitertLlm.addImageToSession(handle, imagePath);
+  log(`addImageInternal - handle: ${handle}, path: ${imagePath}`);
+  try {
+    const result = await LitertLlm.addImageToSession(handle, imagePath);
+    log(`addImageInternal success - handle: ${handle}`);
+    return result;
+  } catch (error) {
+    logError(`addImageInternal failed - handle: ${handle}, path: ${imagePath}`, error);
+    throw error;
+  }
 }
 
-/**
- * Add audio to the model session for multimodal inference (internal)
- */
 async function addAudioInternal(
   handle: number,
   audioPath: string
 ): Promise<boolean> {
-  return LitertLlm.addAudioToSession(handle, audioPath);
+  log(`addAudioInternal - handle: ${handle}, path: ${audioPath}`);
+  try {
+    const result = await LitertLlm.addAudioToSession(handle, audioPath);
+    log(`addAudioInternal success - handle: ${handle}`);
+    return result;
+  } catch (error) {
+    logError(`addAudioInternal failed - handle: ${handle}, path: ${audioPath}`, error);
+    throw error;
+  }
 }
 
 /**
@@ -247,6 +323,10 @@ async function processMultimodalContent(
   enableVisionModality: boolean,
   enableAudioModality: boolean
 ): Promise<void> {
+  log(`processMultimodalContent - handle: ${handle}, vision: ${enableVisionModality}, audio: ${enableAudioModality}`);
+  let imageCount = 0;
+  let audioCount = 0;
+
   for (const message of messages) {
     if (message.role !== "user" || typeof message.content === "string") {
       continue;
@@ -261,6 +341,7 @@ async function processMultimodalContent(
         const imagePath = extractFilePath(part.image);
         if (imagePath) {
           await addImageInternal(handle, imagePath);
+          imageCount++;
         }
       } else if (part.type === "file") {
         const filePath = extractFilePath(part.data);
@@ -272,15 +353,21 @@ async function processMultimodalContent(
             continue;
           }
           await addImageInternal(handle, filePath);
+          imageCount++;
         } else if (isAudioMediaType(part.mediaType)) {
           if (!enableAudioModality) {
             console.warn("Audio modality not enabled, skipping audio file");
             continue;
           }
           await addAudioInternal(handle, filePath);
+          audioCount++;
         }
       }
     }
+  }
+
+  if (imageCount > 0 || audioCount > 0) {
+    log(`processMultimodalContent complete - handle: ${handle}, images: ${imageCount}, audio: ${audioCount}`);
   }
 }
 
@@ -339,16 +426,21 @@ export async function generateText(
   messages: ModelMessage[],
   options: GenerationOptions = {}
 ): Promise<GenerateTextResult> {
+  const requestId = getNextRequestId();
+  log(`generateText called - modelId: ${model.id}, requestId: ${requestId}, messages:`, messages);
+
   const { abortSignal } = options;
 
   const handle = getHandleFromModel(model);
 
   if (abortSignal?.aborted) {
+    logError(`generateText aborted before start - modelId: ${model.id}, requestId: ${requestId}`);
     throw new Error("Generation was aborted");
   }
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
+      log(`generateText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`);
       stopGeneration(model);
     });
   }
@@ -362,14 +454,16 @@ export async function generateText(
   );
 
   const prompt = messagesToPrompt(messages);
+  log(`generateText prompt - modelId: ${model.id}, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}`);
 
   try {
     const text = await LitertLlm.generateResponse(
       handle,
-      getNextRequestId(),
+      requestId,
       prompt
     );
 
+    log(`generateText success - modelId: ${model.id}, requestId: ${requestId}, response length: ${text.length}`);
     return {
       text,
       finishReason: "stop",
@@ -379,6 +473,7 @@ export async function generateText(
       },
     };
   } catch (error) {
+    logError(`generateText failed - modelId: ${model.id}, requestId: ${requestId}`, error);
     return {
       text: "",
       finishReason: "error",
@@ -474,8 +569,10 @@ export async function streamText(
   const { abortSignal } = options;
   const handle = getHandleFromModel(model);
   const requestId = getNextRequestId();
+  log(`streamText called - modelId: ${model.id}, requestId: ${requestId}, messages:`, messages);
 
   if (abortSignal?.aborted) {
+    logError(`streamText aborted before start - modelId: ${model.id}, requestId: ${requestId}`);
     throw new Error("Generation was aborted");
   }
 
@@ -488,6 +585,7 @@ export async function streamText(
   );
 
   const prompt = messagesToPrompt(messages);
+  log(`streamText prompt - modelId: ${model.id}, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}`);
 
   // Shared state for both textStream and text Promise
   const queue: string[] = [];
@@ -524,6 +622,7 @@ export async function streamText(
         ev.handle === handle &&
         !(abortSignal?.aborted ?? false)
       ) {
+        logError(`streamText error response - modelId: ${model.id}, requestId: ${requestId}, error: ${ev.error}`);
         error = new Error(ev.error);
         cleanup();
         textReject!(error);
@@ -538,6 +637,7 @@ export async function streamText(
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
+      log(`streamText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`);
       isDone = true;
       cleanup();
     });
@@ -546,11 +646,13 @@ export async function streamText(
   // Start generation
   LitertLlm.generateResponseAsync(handle, requestId, prompt)
     .then(() => {
+      log(`streamText generation completed - modelId: ${model.id}, requestId: ${requestId}, total length: ${accumulatedText.length}`);
       isDone = true;
       cleanup();
       textResolve!(accumulatedText);
     })
     .catch((err) => {
+      logError(`streamText generation failed - modelId: ${model.id}, requestId: ${requestId}`, err);
       isDone = true;
       cleanup();
       textReject!(err);
@@ -605,6 +707,13 @@ export async function streamText(
  * Stop ongoing generation for a model
  */
 export async function stopGeneration(model: LLMModel): Promise<void> {
-  const handle = getHandleFromModel(model);
-  await LitertLlm.stopGeneration(handle);
+  log(`stopGeneration called - modelId: ${model.id}`);
+  try {
+    const handle = getHandleFromModel(model);
+    await LitertLlm.stopGeneration(handle);
+    log(`stopGeneration success - modelId: ${model.id}`);
+  } catch (error) {
+    logError(`stopGeneration failed - modelId: ${model.id}`, error);
+    throw error;
+  }
 }

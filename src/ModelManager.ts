@@ -48,10 +48,10 @@ export class ModelManager {
         status === "completed"
           ? "downloaded"
           : status === "error"
-            ? "error"
-            : status === "downloading"
-              ? "downloading"
-              : "not_downloaded";
+          ? "error"
+          : status === "downloading"
+          ? "downloading"
+          : "not_downloaded";
 
       if (progress !== undefined) {
         model.progress = progress;

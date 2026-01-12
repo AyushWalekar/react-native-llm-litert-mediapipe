@@ -17,7 +17,7 @@ export type ErrorResponseEventPayload = {
 };
 
 export type LoggingEventPayload = {
-  handle: number;
+  handle?: number;
   message: string;
 };
 
