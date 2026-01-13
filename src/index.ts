@@ -16,6 +16,7 @@ export {
   generateText,
   streamText,
   stopGeneration,
+  generateStructuredOutput,
 } from "./LlmApi";
 
 // Type exports

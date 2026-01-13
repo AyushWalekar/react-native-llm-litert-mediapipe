@@ -2,6 +2,7 @@
  * Example demonstrating the LiteRT LLM API
  * AI-SDK compatible interface with ModelMessage format
  * Includes multimodal support (image and audio input)
+ * Includes structured output demo with Zod schema validation
  */
 import React, {useState, useCallback, useRef} from 'react';
 import {
@@ -23,6 +24,7 @@ import LinearGradient from 'react-native-linear-gradient';
 
 import {
   useLlm,
+  generateStructuredOutput,
   type ModelMessage,
   type TextPart,
   type ImagePart,
@@ -32,6 +34,7 @@ import {
 import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import * as AudioRecorder from './AudioRecorderJS';
 import RNFS from 'react-native-fs';
+import {z} from 'zod';
 
 const THEME = {
   gradient: ['#f5e09aff', '#fcede9ff'],
@@ -48,6 +51,14 @@ const PRESET_MODEL_PATH =
     ? `${RNFS.DocumentDirectoryPath}/litert/gemma-3n-E4B-it-int4.litertlm`
     : '';
 
+// Define a Zod schema for structured output - outside component to avoid recreation
+const PersonSchema = z.object({
+  name: z.string().describe('The full name of the person'),
+  age: z.number().describe('The age of the person'),
+  occupation: z.string().optional().describe('The occupation of the person'),
+  location: z.string().optional().describe('The location/city of the person'),
+});
+
 export default function StandardApiDemo() {
   const [prompt, setPrompt] = useState('');
   const [response, setResponse] = useState('');
@@ -59,6 +70,13 @@ export default function StandardApiDemo() {
   const [isRecording, setIsRecording] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [showMultimodalSection, setShowMultimodalSection] = useState(false);
+  const [showStructuredOutputSection, setShowStructuredOutputSection] =
+    useState(false);
+  const [structuredOutputPrompt, setStructuredOutputPrompt] = useState(
+    'Extract person info: John Smith is a 32 year old software engineer living in San Francisco.',
+  );
+  const [structuredOutputResult, setStructuredOutputResult] = useState('');
+  const [isGeneratingStructured, setIsGeneratingStructured] = useState(false);
 
   const llm = useLlm({
     type: 'file',
@@ -346,6 +364,49 @@ export default function StandardApiDemo() {
     setAudioDuration(null);
   }, []);
 
+  const handleGenerateStructuredOutput = useCallback(async () => {
+    if (!structuredOutputPrompt.trim() || !model) return;
+
+    setIsGeneratingStructured(true);
+    setStructuredOutputResult('');
+
+    try {
+      const messages: ModelMessage[] = [
+        {
+          role: 'system',
+          content:
+            'You are a helpful AI assistant that extracts structured data from text.',
+        },
+        {role: 'user', content: structuredOutputPrompt},
+      ];
+
+      const result = await generateStructuredOutput(
+        model,
+        messages,
+        PersonSchema,
+        {
+          fallbackMode: 'prompt',
+          maxRetries: 2,
+        },
+      );
+
+      // Format the result for display
+      const formattedResult = JSON.stringify(result.object, null, 2);
+      setStructuredOutputResult(
+        `✅ Structured Output (${result.retryCount} retries):\n\n${formattedResult}`,
+      );
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      setStructuredOutputResult(`❌ Error: ${errorMessage}`);
+      Alert.alert(
+        'Structured Output Error',
+        `Failed to generate structured output: ${errorMessage}`,
+      );
+    } finally {
+      setIsGeneratingStructured(false);
+    }
+  }, [structuredOutputPrompt, model]);
+
   const getStatusText = () => {
     if (isLoading) return 'Loading model...';
     if (!isLoaded) return 'Model not loaded';
@@ -514,6 +575,93 @@ export default function StandardApiDemo() {
                         style={[styles.audioInfo, {color: THEME.textColor}]}>
                         Duration: {audioDuration.toFixed(1)}s
                       </Text>
+                    )}
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+
+          {/* Structured Output Section */}
+          {isLoaded && (
+            <>
+              <TouchableOpacity
+                style={[styles.glassCard, styles.collapsibleHeader]}
+                onPress={() =>
+                  setShowStructuredOutputSection(!showStructuredOutputSection)
+                }>
+                <View style={styles.collapsibleHeaderContent}>
+                  <Text style={styles.collapsibleTitle}>
+                    🧩 Structured Output (Zod)
+                  </Text>
+                  <Text
+                    style={[
+                      styles.collapsibleStatus,
+                      {color: THEME.primaryColor},
+                    ]}>
+                    Extract JSON from text
+                  </Text>
+                </View>
+                <Text style={styles.collapsibleArrow}>
+                  {showStructuredOutputSection ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showStructuredOutputSection && (
+                <View style={styles.section}>
+                  <View style={[styles.glassCard, styles.promptSection]}>
+                    <Text style={[styles.inputLabel, {color: THEME.textColor}]}>
+                      Text to Extract From
+                    </Text>
+                    <TextInput
+                      style={[styles.input, {minHeight: 80}]}
+                      placeholder="Enter text containing person information..."
+                      placeholderTextColor="#6b7280"
+                      value={structuredOutputPrompt}
+                      onChangeText={setStructuredOutputPrompt}
+                      multiline
+                      editable={!isGeneratingStructured}
+                    />
+                    <Text
+                      style={[
+                        styles.schemaLabel,
+                        {color: THEME.textColor, marginTop: 12},
+                      ]}>
+                      Schema: Person {'{'} name, age, occupation?, location?{' '}
+                      {'}'}
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.generateButton,
+                        {backgroundColor: THEME.primaryColor, marginTop: 16},
+                        (!structuredOutputPrompt.trim() ||
+                          isGeneratingStructured) &&
+                          styles.generateButtonDisabled,
+                      ]}
+                      onPress={handleGenerateStructuredOutput}
+                      disabled={
+                        !structuredOutputPrompt.trim() || isGeneratingStructured
+                      }>
+                      {isGeneratingStructured ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.generateButtonText}>
+                          Generate Structured Output
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {structuredOutputResult !== '' && (
+                      <View style={[styles.responseCard, {marginTop: 16}]}>
+                        <Text
+                          style={[
+                            styles.responseText,
+                            {color: THEME.textColor, fontFamily: 'monospace'},
+                          ]}>
+                          {structuredOutputResult}
+                        </Text>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -866,5 +1014,10 @@ const styles = StyleSheet.create({
   responseText: {
     fontSize: 15,
     lineHeight: 24,
+  },
+  schemaLabel: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    opacity: 0.8,
   },
 });

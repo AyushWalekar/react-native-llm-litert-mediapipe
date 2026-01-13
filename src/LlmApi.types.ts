@@ -143,6 +143,45 @@ export interface StreamTextResult {
 }
 
 /**
+ * Fallback mode for structured output when native support is unavailable
+ * - 'error': Throw an error if structured output is not supported
+ * - 'prompt': Fall back to prompt-based JSON extraction with validation
+ */
+export type StructuredOutputFallbackMode = "error" | "prompt";
+
+/**
+ * Options for generateStructuredOutput
+ */
+export interface StructuredOutputOptions {
+  /** Fallback mode when native structured output is not available. Default: 'prompt' */
+  fallbackMode?: StructuredOutputFallbackMode;
+  /** Number of retry attempts if JSON parsing/validation fails. Default: 2 */
+  maxRetries?: number;
+  /** Abort signal to cancel generation */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Result from generateStructuredOutput
+ */
+export interface StructuredOutputResult<T> {
+  /** The parsed and validated object matching the schema */
+  object: T;
+  /** The raw text response from the model */
+  rawText: string;
+  /** The finish reason */
+  finishReason:
+    | "stop"
+    | "length"
+    | "content-filter"
+    | "tool-calls"
+    | "error"
+    | "other";
+  /** Number of retries attempted */
+  retryCount: number;
+}
+
+/**
  * Model instance returned by loadModel
  */
 export interface LLMModel {

@@ -11,7 +11,10 @@ import {
   GenerateTextResult,
   StreamTextResult,
   LLMModel,
+  StructuredOutputOptions,
+  StructuredOutputResult,
 } from "./LlmApi.types";
+import type { ZodType, ZodTypeDef } from "zod";
 import type { MultimodalOptions } from "./LitertLlm.types";
 import type {
   PartialResponseEventPayload,
@@ -717,3 +720,354 @@ export async function stopGeneration(model: LLMModel): Promise<void> {
     throw error;
   }
 }
+
+/**
+ * Convert a Zod schema to a JSON Schema description string for prompting
+ * This creates a human-readable description that the LLM can follow
+ */
+function zodSchemaToJsonSchemaDescription<T>(
+  schema: ZodType<T, ZodTypeDef, unknown>
+): { schemaDescription: string; schemaJson: object } {
+  // Try to use Zod's built-in JSON Schema conversion if available (Zod v4+)
+  let schemaJson: object;
+
+  try {
+    // Zod v4 has toJsonSchema() or we can use the _def to construct it
+    if ("toJsonSchema" in schema && typeof schema.toJsonSchema === "function") {
+      schemaJson = (schema as unknown as { toJsonSchema: () => object }).toJsonSchema();
+    } else {
+      // Fallback: construct a basic schema from the Zod definition
+      schemaJson = zodDefToJsonSchema(schema._def);
+    }
+  } catch {
+    // If all else fails, use a generic object schema
+    schemaJson = { type: "object" };
+  }
+
+  const schemaDescription = JSON.stringify(schemaJson, null, 2);
+  return { schemaDescription, schemaJson };
+}
+
+/**
+ * Convert Zod definition to JSON Schema (basic implementation)
+ */
+function zodDefToJsonSchema(def: ZodTypeDef): object {
+  const typeName = (def as { typeName?: string }).typeName;
+
+  switch (typeName) {
+    case "ZodString":
+      return { type: "string" };
+    case "ZodNumber":
+      return { type: "number" };
+    case "ZodBoolean":
+      return { type: "boolean" };
+    case "ZodNull":
+      return { type: "null" };
+    case "ZodArray": {
+      const arrayDef = def as { type?: { _def: ZodTypeDef } };
+      return {
+        type: "array",
+        items: arrayDef.type ? zodDefToJsonSchema(arrayDef.type._def) : {},
+      };
+    }
+    case "ZodObject": {
+      const objectDef = def as {
+        shape?: () => Record<string, { _def: ZodTypeDef }>;
+      };
+      const shape = objectDef.shape?.() ?? {};
+      const properties: Record<string, object> = {};
+      const required: string[] = [];
+
+      for (const [key, value] of Object.entries(shape)) {
+        properties[key] = zodDefToJsonSchema(value._def);
+        // Check if not optional
+        const innerTypeName = (value._def as { typeName?: string }).typeName;
+        if (innerTypeName !== "ZodOptional" && innerTypeName !== "ZodNullable") {
+          required.push(key);
+        }
+      }
+
+      return {
+        type: "object",
+        properties,
+        required: required.length > 0 ? required : undefined,
+      };
+    }
+    case "ZodOptional": {
+      const optionalDef = def as { innerType?: { _def: ZodTypeDef } };
+      return optionalDef.innerType
+        ? zodDefToJsonSchema(optionalDef.innerType._def)
+        : {};
+    }
+    case "ZodNullable": {
+      const nullableDef = def as { innerType?: { _def: ZodTypeDef } };
+      const innerSchema = nullableDef.innerType
+        ? zodDefToJsonSchema(nullableDef.innerType._def)
+        : {};
+      return { ...innerSchema, nullable: true };
+    }
+    case "ZodEnum": {
+      const enumDef = def as { values?: string[] };
+      return { type: "string", enum: enumDef.values };
+    }
+    case "ZodLiteral": {
+      const literalDef = def as { value?: unknown };
+      return { const: literalDef.value };
+    }
+    case "ZodUnion": {
+      const unionDef = def as { options?: Array<{ _def: ZodTypeDef }> };
+      return {
+        oneOf: unionDef.options?.map((opt) => zodDefToJsonSchema(opt._def)) ?? [],
+      };
+    }
+    default:
+      return { type: "object" };
+  }
+}
+
+/**
+ * Extract JSON from model response text
+ * Handles responses that may include markdown code blocks or extra text
+ */
+function extractJsonFromResponse(text: string): string {
+  // Try to find JSON in code blocks first
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    return codeBlockMatch[1].trim();
+  }
+
+  // Try to find JSON object or array
+  const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (jsonMatch) {
+    return jsonMatch[1].trim();
+  }
+
+  // Return the original text trimmed
+  return text.trim();
+}
+
+/**
+ * Generate structured output from an LLM model using a Zod schema
+ * 
+ * This function prompts the model to output JSON matching the provided schema,
+ * then validates the response using Zod. Supports retry on validation failure.
+ * 
+ * @param model - The loaded LLM model
+ * @param messages - The conversation messages
+ * @param schema - A Zod schema defining the expected output structure
+ * @param options - Options for structured output generation
+ * @returns A promise resolving to the parsed and validated object
+ * 
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ * 
+ * const PersonSchema = z.object({
+ *   name: z.string(),
+ *   age: z.number(),
+ *   occupation: z.string().optional(),
+ * });
+ * 
+ * const result = await generateStructuredOutput(
+ *   model,
+ *   [{ role: 'user', content: 'Extract person info from: John is a 30 year old engineer' }],
+ *   PersonSchema
+ * );
+ * 
+ * console.log(result.object); // { name: 'John', age: 30, occupation: 'engineer' }
+ * ```
+ */
+export async function generateStructuredOutput<T>(
+  model: LLMModel,
+  messages: ModelMessage[],
+  schema: ZodType<T, ZodTypeDef, unknown>,
+  options: StructuredOutputOptions = {}
+): Promise<StructuredOutputResult<T>> {
+  const { fallbackMode = "prompt", maxRetries = 2, abortSignal } = options;
+  const requestId = getNextRequestId();
+
+  log(
+    `generateStructuredOutput called - modelId: ${model.id}, requestId: ${requestId}, fallbackMode: ${fallbackMode}`
+  );
+
+  // Since native structured output is not yet available, we use prompt-based approach
+  // If fallbackMode is 'error', we could check for native support here in the future
+  if (fallbackMode === "error") {
+    // For now, native structured output is not implemented
+    // In the future, we can add native tool-based support here
+    log(
+      `generateStructuredOutput - native support not available, fallbackMode is 'error'`
+    );
+    throw new Error(
+      "Native structured output is not yet supported. Use fallbackMode: 'prompt' instead."
+    );
+  }
+
+  // Get JSON Schema description from Zod schema
+  const { schemaDescription } = zodSchemaToJsonSchemaDescription(schema);
+
+  let lastError: Error | null = null;
+  let retryCount = 0;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (abortSignal?.aborted) {
+      throw new Error("Generation was aborted");
+    }
+
+    // Build the structured output prompt
+    const structuredPrompt = buildStructuredOutputPrompt(
+      messages,
+      schemaDescription,
+      attempt > 0 ? lastError?.message : undefined
+    );
+
+    log(
+      `generateStructuredOutput attempt ${attempt + 1}/${maxRetries + 1} - modelId: ${model.id}`
+    );
+
+    try {
+      const handle = getHandleFromModel(model);
+
+      // Process multimodal content
+      await processMultimodalContent(
+        handle,
+        messages,
+        model.enableVisionModality ?? false,
+        model.enableAudioModality ?? false
+      );
+
+      const rawText = await LitertLlm.generateResponse(
+        handle,
+        requestId,
+        structuredPrompt
+      );
+
+      log(
+        `generateStructuredOutput raw response - modelId: ${model.id}, length: ${rawText.length}`
+      );
+
+      // Extract JSON from response
+      const jsonText = extractJsonFromResponse(rawText);
+
+      // Parse JSON
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(jsonText);
+      } catch (parseError) {
+        const msg = parseError instanceof Error ? parseError.message : String(parseError);
+        lastError = new Error(`JSON parsing failed: ${msg}. Raw text: ${jsonText.substring(0, 200)}`);
+        log(`generateStructuredOutput JSON parse error - attempt ${attempt + 1}: ${msg}`);
+        retryCount = attempt;
+        continue;
+      }
+
+      // Validate with Zod
+      const validationResult = schema.safeParse(parsedJson);
+
+      if (validationResult.success) {
+        log(
+          `generateStructuredOutput success - modelId: ${model.id}, retryCount: ${attempt}`
+        );
+        return {
+          object: validationResult.data,
+          rawText,
+          finishReason: "stop",
+          retryCount: attempt,
+        };
+      } else {
+        const zodError = validationResult.error;
+        const errorMessages = zodError.errors
+          .map((e: { path: (string | number)[]; message: string }) => `${e.path.join(".")}: ${e.message}`)
+          .join("; ");
+        lastError = new Error(`Validation failed: ${errorMessages}`);
+        log(
+          `generateStructuredOutput validation error - attempt ${attempt + 1}: ${errorMessages}`
+        );
+        retryCount = attempt;
+        continue;
+      }
+    } catch (error) {
+      lastError =
+        error instanceof Error ? error : new Error(String(error));
+      log(
+        `generateStructuredOutput generation error - attempt ${attempt + 1}: ${lastError.message}`
+      );
+      retryCount = attempt;
+
+      // If it's an abort, don't retry
+      if (lastError.message.includes("aborted")) {
+        throw lastError;
+      }
+    }
+  }
+
+  // All retries failed
+  logError(
+    `generateStructuredOutput failed after ${maxRetries + 1} attempts - modelId: ${model.id}`,
+    lastError
+  );
+  throw new Error(
+    `Structured output generation failed after ${maxRetries + 1} attempts: ${lastError?.message}`
+  );
+}
+
+/**
+ * Build the prompt for structured output generation
+ */
+function buildStructuredOutputPrompt(
+  messages: ModelMessage[],
+  schemaDescription: string,
+  previousError?: string
+): string {
+  let prompt = "";
+
+  // Add conversation messages
+  for (const message of messages) {
+    const { role, content } = message;
+
+    if (role === "system") {
+      prompt += `System: ${content}\n\n`;
+    } else if (role === "user") {
+      if (typeof content === "string") {
+        prompt += `User: ${content}\n\n`;
+      } else if (Array.isArray(content)) {
+        let userContent = "User: ";
+        for (const part of content) {
+          if (part.type === "text") {
+            userContent += `${part.text} `;
+          } else if (part.type === "image") {
+            userContent += `[IMAGE] `;
+          } else if (part.type === "file") {
+            userContent += `[FILE] `;
+          }
+        }
+        prompt += `${userContent.trim()}\n\n`;
+      }
+    } else if (role === "assistant") {
+      if (typeof content === "string") {
+        prompt += `Assistant: ${content}\n\n`;
+      } else if (Array.isArray(content)) {
+        let assistantContent = "Assistant: ";
+        for (const part of content) {
+          if (part.type === "text") {
+            assistantContent += `${part.text} `;
+          }
+        }
+        prompt += `${assistantContent.trim()}\n\n`;
+      }
+    }
+  }
+
+  // Add structured output instruction
+  prompt += `\n---\nIMPORTANT: You MUST respond with ONLY a valid JSON object that matches the following JSON Schema. Do not include any explanation, markdown formatting, or code blocks. Output raw JSON only.\n\nJSON Schema:\n${schemaDescription}\n`;
+
+  // Add retry hint if there was a previous error
+  if (previousError) {
+    prompt += `\nPrevious attempt failed with error: ${previousError}\nPlease fix the output to match the schema exactly.\n`;
+  }
+
+  prompt += `\nJSON Response:`;
+
+  return prompt;
+}
+
