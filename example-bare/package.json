@@ -18,7 +18,8 @@
     "react-native-image-picker": "^8.2.1",
     "react-native-linear-gradient": "^2.8.3",
     "react-native-live-audio-stream": "^1.1.1",
-    "react-native-llm-litert-mediapipe": "file:.."
+    "react-native-llm-litert-mediapipe": "file:..",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

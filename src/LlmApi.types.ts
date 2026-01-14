@@ -163,3 +163,27 @@ export interface LLMModel {
   /** Add audio to the session for multimodal inference */
   addAudio?: (audioPath: string) => Promise<boolean>;
 }
+
+/**
+ * Options for generateStructuredOutput
+ */
+export interface StructuredOutputOptions {
+  /** Abort signal to cancel generation */
+  abortSignal?: AbortSignal;
+  /** Maximum retry attempts if validation fails (default: 3) */
+  maxRetries?: number;
+}
+
+/**
+ * Result from generateStructuredOutput
+ */
+export interface GenerateStructuredOutputResult<T> {
+  /** The validated, typed structured data */
+  data: T;
+  /** The raw JSON string from the model */
+  rawJson: string;
+  /** Number of attempts made */
+  attempts: number;
+  /** The finish reason */
+  finishReason: "stop" | "error" | "validation_failed";
+}

@@ -23,6 +23,7 @@ import LinearGradient from 'react-native-linear-gradient';
 
 import {
   useLlm,
+  generateStructuredOutput,
   type ModelMessage,
   type TextPart,
   type ImagePart,
@@ -32,6 +33,17 @@ import {
 import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import * as AudioRecorder from './AudioRecorderJS';
 import RNFS from 'react-native-fs';
+import {z} from 'zod';
+
+// Define the sentiment analysis schema
+const SentimentSchema = z.object({
+  sentiment: z.enum(['positive', 'negative', 'neutral']),
+  confidence: z.number(),
+  summary: z.string(),
+  keywords: z.array(z.string()),
+});
+
+type SentimentResult = z.infer<typeof SentimentSchema>;
 
 const THEME = {
   gradient: ['#f5e09aff', '#fcede9ff'],
@@ -59,6 +71,15 @@ export default function StandardApiDemo() {
   const [isRecording, setIsRecording] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [showMultimodalSection, setShowMultimodalSection] = useState(false);
+
+  // Structured output state
+  const [showStructuredSection, setShowStructuredSection] = useState(false);
+  const [structuredPrompt, setStructuredPrompt] = useState(
+    'Analyze the sentiment of this text: "I absolutely love this new product! It has exceeded all my expectations and the customer service was fantastic."',
+  );
+  const [structuredResult, setStructuredResult] =
+    useState<SentimentResult | null>(null);
+  const [isGeneratingStructured, setIsGeneratingStructured] = useState(false);
 
   const llm = useLlm({
     type: 'file',
@@ -346,6 +367,56 @@ export default function StandardApiDemo() {
     setAudioDuration(null);
   }, []);
 
+  // Structured output handler
+  const handleGenerateStructuredOutput = useCallback(async () => {
+    if (!structuredPrompt.trim() || !model) return;
+
+    if (Platform.OS === 'ios') {
+      Alert.alert(
+        'Not Supported',
+        'Structured output is only supported on Android with LiteRT-LM models.',
+      );
+      return;
+    }
+
+    setIsGeneratingStructured(true);
+    setStructuredResult(null);
+
+    try {
+      const messages: ModelMessage[] = [
+        {
+          role: 'system',
+          content:
+            'You are a sentiment analysis assistant. Analyze the given text and provide structured sentiment data.',
+        },
+        {role: 'user', content: structuredPrompt},
+      ];
+
+      const result = await generateStructuredOutput(
+        model,
+        messages,
+        SentimentSchema,
+        {maxRetries: 3},
+      );
+
+      if (result.finishReason === 'stop') {
+        setStructuredResult(result.data);
+        console.log('Structured output result:', result.data);
+      } else {
+        Alert.alert(
+          'Validation Failed',
+          `Failed to generate valid structured output after ${result.attempts} attempts. Raw response: ${result.rawJson}`,
+        );
+      }
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      console.error('Structured output error:', errorMessage);
+      Alert.alert('Error', `Structured output failed: ${errorMessage}`);
+    } finally {
+      setIsGeneratingStructured(false);
+    }
+  }, [structuredPrompt, model]);
+
   const getStatusText = () => {
     if (isLoading) return 'Loading model...';
     if (!isLoaded) return 'Model not loaded';
@@ -514,6 +585,124 @@ export default function StandardApiDemo() {
                         style={[styles.audioInfo, {color: THEME.textColor}]}>
                         Duration: {audioDuration.toFixed(1)}s
                       </Text>
+                    )}
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+
+          {/* Structured Output Section */}
+          {Platform.OS === 'android' && isLoaded && (
+            <>
+              <TouchableOpacity
+                style={[styles.glassCard, styles.collapsibleHeader]}
+                onPress={() => setShowStructuredSection(!showStructuredSection)}>
+                <View style={styles.collapsibleHeaderContent}>
+                  <Text style={styles.collapsibleTitle}>
+                    Structured Output (Tool Calling)
+                  </Text>
+                  <Text style={styles.collapsibleSubtitle}>
+                    Generate JSON with Zod schema validation
+                  </Text>
+                </View>
+                <Text style={styles.collapsibleArrow}>
+                  {showStructuredSection ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+
+              {showStructuredSection && (
+                <View style={styles.section}>
+                  <View style={[styles.glassCard, styles.structuredSection]}>
+                    <Text
+                      style={[styles.inputLabel, {color: THEME.textColor}]}>
+                      Text to Analyze
+                    </Text>
+                    <TextInput
+                      style={styles.structuredInput}
+                      placeholder="Enter text for sentiment analysis..."
+                      placeholderTextColor="#6b7280"
+                      value={structuredPrompt}
+                      onChangeText={setStructuredPrompt}
+                      multiline
+                    />
+
+                    <View style={styles.schemaInfo}>
+                      <Text style={styles.schemaLabel}>Output Schema:</Text>
+                      <Text style={styles.schemaCode}>
+                        {`{
+  sentiment: 'positive' | 'negative' | 'neutral',
+  confidence: number,
+  summary: string,
+  keywords: string[]
+}`}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.structuredButton,
+                        {backgroundColor: '#9b59b6'},
+                        (isGeneratingStructured || !structuredPrompt.trim()) &&
+                          styles.generateButtonDisabled,
+                      ]}
+                      onPress={handleGenerateStructuredOutput}
+                      disabled={
+                        isGeneratingStructured || !structuredPrompt.trim()
+                      }>
+                      {isGeneratingStructured ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.generateButtonText}>
+                          Generate Structured Output
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {structuredResult && (
+                      <View style={styles.structuredResultCard}>
+                        <Text style={styles.structuredResultTitle}>Result:</Text>
+                        <View style={styles.resultRow}>
+                          <Text style={styles.resultLabel}>Sentiment:</Text>
+                          <Text
+                            style={[
+                              styles.resultValue,
+                              styles.sentimentBadge,
+                              {
+                                backgroundColor:
+                                  structuredResult.sentiment === 'positive'
+                                    ? '#27ae60'
+                                    : structuredResult.sentiment === 'negative'
+                                    ? '#e74c3c'
+                                    : '#f39c12',
+                              },
+                            ]}>
+                            {structuredResult.sentiment.toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.resultRow}>
+                          <Text style={styles.resultLabel}>Confidence:</Text>
+                          <Text style={styles.resultValue}>
+                            {(structuredResult.confidence * 100).toFixed(1)}%
+                          </Text>
+                        </View>
+                        <View style={styles.resultRow}>
+                          <Text style={styles.resultLabel}>Summary:</Text>
+                          <Text style={styles.resultValueText}>
+                            {structuredResult.summary}
+                          </Text>
+                        </View>
+                        <View style={styles.resultRow}>
+                          <Text style={styles.resultLabel}>Keywords:</Text>
+                          <View style={styles.keywordsContainer}>
+                            {structuredResult.keywords.map((keyword, index) => (
+                              <Text key={index} style={styles.keywordBadge}>
+                                {keyword}
+                              </Text>
+                            ))}
+                          </View>
+                        </View>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -866,5 +1055,106 @@ const styles = StyleSheet.create({
   responseText: {
     fontSize: 15,
     lineHeight: 24,
+  },
+  // Structured output styles
+  collapsibleSubtitle: {
+    fontSize: 12,
+    color: '#636e72',
+    marginTop: 2,
+  },
+  structuredSection: {
+    padding: 20,
+  },
+  structuredInput: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    padding: 16,
+    borderRadius: 12,
+    fontSize: 14,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    color: '#2d3436',
+    marginBottom: 16,
+  },
+  schemaInfo: {
+    backgroundColor: 'rgba(155, 89, 182, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  schemaLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9b59b6',
+    marginBottom: 8,
+  },
+  schemaCode: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    color: '#2d3436',
+    lineHeight: 18,
+  },
+  structuredButton: {
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  structuredResultCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  structuredResultTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2d3436',
+    marginBottom: 12,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  resultLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#636e72',
+    width: 90,
+  },
+  resultValue: {
+    fontSize: 13,
+    color: '#2d3436',
+    flex: 1,
+  },
+  resultValueText: {
+    fontSize: 13,
+    color: '#2d3436',
+    flex: 1,
+    lineHeight: 18,
+  },
+  sentimentBadge: {
+    color: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  keywordsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  keywordBadge: {
+    backgroundColor: 'rgba(108, 92, 231, 0.2)',
+    color: '#6c5ce7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

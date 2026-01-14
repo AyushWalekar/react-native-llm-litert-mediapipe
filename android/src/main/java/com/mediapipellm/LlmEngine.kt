@@ -42,6 +42,17 @@ interface LlmEngine {
      * Release all resources held by this engine.
      */
     fun close()
+
+    /**
+     * Generate structured output using tool calling.
+     * The model will be forced to call a tool with parameters matching the provided schema.
+     *
+     * @param requestId Unique identifier for this request
+     * @param prompt The text prompt to send to the model
+     * @param outputSchema JSON Schema string defining the expected output structure
+     * @return JSON string containing the structured output matching the schema
+     */
+    fun generateStructuredOutput(requestId: Int, prompt: String, outputSchema: String): String
 }
 
 /**

@@ -173,6 +173,24 @@ export interface LitertLlmModuleInterface {
   stopGeneration(handle: number): Promise<boolean>;
 
   /**
+   * Generate structured output using tool calling.
+   * The model will be forced to call a tool with parameters matching the provided JSON schema.
+   * Only supported with LiteRT-LM models (.litertlm files).
+   *
+   * @param handle Model handle
+   * @param requestId Request identifier for tracking
+   * @param prompt The user prompt
+   * @param outputSchema JSON Schema string defining the expected output structure
+   * @returns JSON string containing the structured output matching the schema
+   */
+  generateStructuredOutput(
+    handle: number,
+    requestId: number,
+    prompt: string,
+    outputSchema: string
+  ): Promise<string>;
+
+  /**
    * Adds a listener for a specific event.
    */
   addListener<EventName extends keyof LitertLlmModuleEvents>(

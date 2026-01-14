@@ -11,6 +11,8 @@ import {
   GenerateTextResult,
   StreamTextResult,
   LLMModel,
+  StructuredOutputOptions,
+  GenerateStructuredOutputResult,
 } from "./LlmApi.types";
 import type { MultimodalOptions } from "./LitertLlm.types";
 import type {
@@ -18,6 +20,7 @@ import type {
   ErrorResponseEventPayload,
   LoggingEventPayload,
 } from "./LitertLlm.types";
+import type { ZodType, ZodTypeDef } from "zod";
 
 let nextModelId = 1;
 
@@ -716,4 +719,295 @@ export async function stopGeneration(model: LLMModel): Promise<void> {
     logError(`stopGeneration failed - modelId: ${model.id}`, error);
     throw error;
   }
+}
+
+/**
+ * Convert a Zod schema to JSON Schema format.
+ * Supports Zod v4's toJsonSchema() or falls back to manual conversion for v3.
+ */
+function zodToJsonSchema<T>(schema: ZodType<T, ZodTypeDef, unknown>): object {
+  // Check if the schema has a toJsonSchema method (Zod v4 style)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof (schema as any).toJsonSchema === "function") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (schema as any).toJsonSchema();
+  }
+
+  // Try to use zod's z.toJsonSchema if available (Zod v4)
+  try {
+    // Dynamic import approach for Zod v4
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const { toJsonSchema } = require("zod/v4/json-schema");
+    if (typeof toJsonSchema === "function") {
+      return toJsonSchema(schema);
+    }
+  } catch {
+    // Zod v4 json-schema module not available, try alternative
+  }
+
+  // Try zod-to-json-schema package if available
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    const zodToJsonSchemaLib = require("zod-to-json-schema");
+    if (zodToJsonSchemaLib && typeof zodToJsonSchemaLib.zodToJsonSchema === "function") {
+      return zodToJsonSchemaLib.zodToJsonSchema(schema);
+    }
+    if (typeof zodToJsonSchemaLib === "function") {
+      return zodToJsonSchemaLib(schema);
+    }
+  } catch {
+    // zod-to-json-schema not available
+  }
+
+  // Fallback: try to extract schema definition from Zod's internal structure
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const def = (schema as any)._def;
+  if (def) {
+    return convertZodDefToJsonSchema(def);
+  }
+
+  throw new Error(
+    "Could not convert Zod schema to JSON Schema. " +
+    "Please install 'zod-to-json-schema' package or use Zod v4 with 'zod/v4/json-schema'."
+  );
+}
+
+/**
+ * Fallback converter for Zod schema definitions to JSON Schema.
+ * This is a simplified converter that handles common cases.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function convertZodDefToJsonSchema(def: any): object {
+  const typeName = def.typeName;
+
+  switch (typeName) {
+    case "ZodObject": {
+      const properties: Record<string, object> = {};
+      const required: string[] = [];
+
+      if (def.shape) {
+        const shape = typeof def.shape === "function" ? def.shape() : def.shape;
+        for (const [key, value] of Object.entries(shape)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const fieldDef = (value as any)._def;
+          properties[key] = convertZodDefToJsonSchema(fieldDef);
+
+          // Check if field is optional
+          if (fieldDef.typeName !== "ZodOptional" && fieldDef.typeName !== "ZodNullable") {
+            required.push(key);
+          }
+        }
+      }
+
+      return {
+        type: "object",
+        properties,
+        ...(required.length > 0 ? { required } : {}),
+      };
+    }
+
+    case "ZodString":
+      return { type: "string" };
+
+    case "ZodNumber":
+      return { type: "number" };
+
+    case "ZodBoolean":
+      return { type: "boolean" };
+
+    case "ZodArray":
+      return {
+        type: "array",
+        items: def.type ? convertZodDefToJsonSchema(def.type._def) : {},
+      };
+
+    case "ZodEnum":
+      return {
+        type: "string",
+        enum: def.values,
+      };
+
+    case "ZodLiteral":
+      return {
+        const: def.value,
+      };
+
+    case "ZodOptional":
+    case "ZodNullable":
+      return convertZodDefToJsonSchema(def.innerType._def);
+
+    case "ZodDefault":
+      return {
+        ...convertZodDefToJsonSchema(def.innerType._def),
+        default: def.defaultValue(),
+      };
+
+    case "ZodUnion":
+      return {
+        oneOf: def.options.map((opt: { _def: unknown }) => convertZodDefToJsonSchema(opt._def)),
+      };
+
+    default:
+      // For unknown types, return a generic schema
+      log(`Unknown Zod type: ${typeName}, using generic schema`);
+      return {};
+  }
+}
+
+/**
+ * Generate structured output from an LLM model using tool calling.
+ * The model will be forced to output data matching the provided Zod schema.
+ *
+ * @param model The loaded LLM model (must be a LiteRT-LM model)
+ * @param messages Array of messages for context
+ * @param schema Zod schema defining the expected output structure
+ * @param options Optional configuration (abortSignal, maxRetries)
+ * @returns Promise resolving to typed, validated structured data
+ *
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ *
+ * const SentimentSchema = z.object({
+ *   sentiment: z.enum(['positive', 'negative', 'neutral']),
+ *   confidence: z.number().min(0).max(1),
+ *   keywords: z.array(z.string()),
+ * });
+ *
+ * const result = await generateStructuredOutput(
+ *   model,
+ *   [{ role: 'user', content: 'Analyze: "I love this product!"' }],
+ *   SentimentSchema
+ * );
+ *
+ * console.log(result.data.sentiment); // 'positive'
+ * console.log(result.data.confidence); // 0.95
+ * ```
+ */
+export async function generateStructuredOutput<T>(
+  model: LLMModel,
+  messages: ModelMessage[],
+  schema: ZodType<T, ZodTypeDef, unknown>,
+  options: StructuredOutputOptions = {}
+): Promise<GenerateStructuredOutputResult<T>> {
+  const { abortSignal, maxRetries = 3 } = options;
+  const requestId = getNextRequestId();
+
+  log(`generateStructuredOutput called - modelId: ${model.id}, requestId: ${requestId}`);
+
+  const handle = getHandleFromModel(model);
+
+  if (abortSignal?.aborted) {
+    logError(`generateStructuredOutput aborted before start - modelId: ${model.id}`);
+    throw new Error("Generation was aborted");
+  }
+
+  // Convert Zod schema to JSON Schema
+  let jsonSchema: object;
+  try {
+    jsonSchema = zodToJsonSchema(schema);
+    log(`generateStructuredOutput - converted schema to JSON Schema`);
+  } catch (error) {
+    logError(`generateStructuredOutput - schema conversion failed`, error);
+    throw new Error(
+      `Failed to convert Zod schema to JSON Schema: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  // Build prompt from messages
+  const prompt = messagesToPrompt(messages);
+  const jsonSchemaString = JSON.stringify(jsonSchema);
+
+  log(`generateStructuredOutput - schema: ${jsonSchemaString.substring(0, 200)}...`);
+
+  let lastError: Error | null = null;
+  let attempts = 0;
+
+  // Retry loop for validation failures
+  while (attempts < maxRetries) {
+    attempts++;
+
+    if (abortSignal?.aborted) {
+      throw new Error("Generation was aborted");
+    }
+
+    try {
+      log(`generateStructuredOutput - attempt ${attempts}/${maxRetries}`);
+
+      // Call native structured output generation
+      const rawJson = await LitertLlm.generateStructuredOutput(
+        handle,
+        requestId,
+        prompt,
+        jsonSchemaString
+      );
+
+      log(`generateStructuredOutput - received raw JSON: ${rawJson.substring(0, 200)}...`);
+
+      // Parse the JSON
+      let parsedData: unknown;
+      try {
+        parsedData = JSON.parse(rawJson);
+      } catch (parseError) {
+        logError(`generateStructuredOutput - JSON parse failed`, parseError);
+        lastError = new Error(`Invalid JSON response: ${parseError}`);
+        continue; // Retry
+      }
+
+      // Validate with Zod schema
+      const validationResult = schema.safeParse(parsedData);
+
+      if (validationResult.success) {
+        log(`generateStructuredOutput - validation successful on attempt ${attempts}`);
+        return {
+          data: validationResult.data,
+          rawJson,
+          attempts,
+          finishReason: "stop",
+        };
+      } else {
+        // Validation failed
+        const zodError = validationResult.error;
+        const errorMessage = zodError.errors
+          .map((e) => `${e.path.join(".")}: ${e.message}`)
+          .join(", ");
+
+        logError(`generateStructuredOutput - validation failed: ${errorMessage}`);
+        lastError = new Error(`Schema validation failed: ${errorMessage}`);
+
+        // If we have retries left, continue
+        if (attempts < maxRetries) {
+          log(`generateStructuredOutput - retrying due to validation failure`);
+          continue;
+        }
+      }
+    } catch (error) {
+      logError(`generateStructuredOutput - generation error on attempt ${attempts}`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // If it's an unsupported operation error, don't retry
+      if (
+        error instanceof Error &&
+        (error.message.includes("UNSUPPORTED_OPERATION") ||
+          error.message.includes("not supported"))
+      ) {
+        throw error;
+      }
+
+      // Continue to retry for other errors
+      if (attempts < maxRetries) {
+        continue;
+      }
+    }
+  }
+
+  // All retries exhausted
+  logError(`generateStructuredOutput - all ${maxRetries} attempts failed`, lastError);
+
+  return {
+    data: {} as T, // Empty data on failure
+    rawJson: "",
+    attempts,
+    finishReason: "validation_failed",
+  };
 }
