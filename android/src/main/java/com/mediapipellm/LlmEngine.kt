@@ -50,9 +50,16 @@ interface LlmEngine {
      * @param requestId Unique identifier for this request
      * @param prompt The text prompt to send to the model
      * @param outputSchema JSON Schema string defining the expected output structure
+     * @param systemPrompt Optional custom system prompt. If null, uses a default prompt.
+     *                     The prompt should instruct the model to call structured_output function.
      * @return JSON string containing the structured output matching the schema
      */
-    fun generateStructuredOutput(requestId: Int, prompt: String, outputSchema: String): String
+    fun generateStructuredOutput(
+        requestId: Int,
+        prompt: String,
+        outputSchema: String,
+        systemPrompt: String? = null
+    ): String
 }
 
 /**

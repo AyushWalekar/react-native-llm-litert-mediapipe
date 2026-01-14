@@ -172,6 +172,21 @@ export interface StructuredOutputOptions {
   abortSignal?: AbortSignal;
   /** Maximum retry attempts if validation fails (default: 3) */
   maxRetries?: number;
+  /**
+   * Custom system prompt for structured output generation.
+   * If not provided, a default prompt will be used that instructs the model
+   * to call the structured_output function with JSON matching the schema.
+   *
+   * The placeholder {{schema}} will be replaced with the JSON schema string.
+   *
+   * @example
+   * ```typescript
+   * systemPrompt: `You are a data extraction assistant.
+   * Extract information and call structured_output with JSON matching this schema:
+   * {{schema}}`
+   * ```
+   */
+  systemPrompt?: string;
 }
 
 /**

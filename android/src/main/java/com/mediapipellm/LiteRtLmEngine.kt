@@ -249,26 +249,32 @@ class LiteRtLmEngine(
      * @param requestId Unique identifier for this request
      * @param prompt The text prompt to send to the model
      * @param outputSchema JSON Schema string defining the expected output structure
+     * @param systemPrompt Optional custom system prompt. If null, uses a default prompt.
      * @return JSON string containing the structured output matching the schema
      */
-    override fun generateStructuredOutput(requestId: Int, prompt: String, outputSchema: String): String {
-        inferenceListener?.logging("generateStructuredOutput: Starting with schema length=${outputSchema.length}")
+    override fun generateStructuredOutput(
+        requestId: Int,
+        prompt: String,
+        outputSchema: String,
+        systemPrompt: String?
+    ): String {
+        inferenceListener?.logging("generateStructuredOutput: Starting with schema length=${outputSchema.length}, customSystemPrompt=${systemPrompt != null}")
 
         try {
             // Parse the output schema to understand its structure
             val schemaJson = JSONObject(outputSchema)
             inferenceListener?.logging("generateStructuredOutput: Parsed schema successfully")
 
-            // Create a system message that instructs the model to output structured data
-            val systemPrompt = buildStructuredOutputSystemPrompt(schemaJson)
-            inferenceListener?.logging("generateStructuredOutput: Built system prompt")
+            // Use custom system prompt if provided, otherwise use default
+            val finalSystemPrompt = systemPrompt ?: buildStructuredOutputSystemPrompt(schemaJson)
+            inferenceListener?.logging("generateStructuredOutput: Using ${if (systemPrompt != null) "custom" else "default"} system prompt")
 
             // Create the tool for structured output
             val structuredOutputTool = StructuredOutputTool(schemaJson, inferenceListener)
 
             // Create a new conversation with the tool registered
             val toolConversationConfig = ConversationConfig(
-                systemMessage = Message.of(listOf(Content.Text(systemPrompt))),
+                systemMessage = Message.of(listOf(Content.Text(finalSystemPrompt))),
                 tools = listOf(structuredOutputTool),
                 samplerConfig = SamplerConfig(
                     topK = config.topK,

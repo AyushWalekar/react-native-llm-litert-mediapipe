@@ -29,6 +29,7 @@ import {
   type ImagePart,
   type FilePart,
   type ContentPart,
+  GenerateStructuredOutputResult,
 } from 'react-native-llm-litert-mediapipe';
 import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import * as AudioRecorder from './AudioRecorderJS';
@@ -397,7 +398,7 @@ export default function StandardApiDemo() {
         messages,
         SentimentSchema,
         {maxRetries: 3},
-      );
+      ) as GenerateStructuredOutputResult<SentimentResult>;
 
       if (result.finishReason === 'stop') {
         setStructuredResult(result.data);

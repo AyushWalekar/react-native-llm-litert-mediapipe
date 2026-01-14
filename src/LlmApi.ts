@@ -20,7 +20,7 @@ import type {
   ErrorResponseEventPayload,
   LoggingEventPayload,
 } from "./LitertLlm.types";
-import type { ZodType, ZodTypeDef } from "zod";
+import { z } from "zod";
 
 let nextModelId = 1;
 
@@ -41,10 +41,16 @@ function enableNativeLogging() {
   if (loggingSubscription) return;
 
   try {
-    loggingSubscription = LitertLlm.addListener("logging", (ev: LoggingEventPayload) => {
-      const prefix = ev.handle !== undefined ? `[Native][Handle:${ev.handle}] ` : "[Native] ";
-      console.log(`${LOG_PREFIX} ${prefix}${ev.message}`);
-    });
+    loggingSubscription = LitertLlm.addListener(
+      "logging",
+      (ev: LoggingEventPayload) => {
+        const prefix =
+          ev.handle !== undefined
+            ? `[Native][Handle:${ev.handle}] `
+            : "[Native] ";
+        console.log(`${LOG_PREFIX} ${prefix}${ev.message}`);
+      }
+    );
     log("Native logging enabled");
   } catch (error) {
     logError("Failed to enable native logging", error);
@@ -255,7 +261,10 @@ async function addImageInternal(
     log(`addImageInternal success - handle: ${handle}`);
     return result;
   } catch (error) {
-    logError(`addImageInternal failed - handle: ${handle}, path: ${imagePath}`, error);
+    logError(
+      `addImageInternal failed - handle: ${handle}, path: ${imagePath}`,
+      error
+    );
     throw error;
   }
 }
@@ -270,7 +279,10 @@ async function addAudioInternal(
     log(`addAudioInternal success - handle: ${handle}`);
     return result;
   } catch (error) {
-    logError(`addAudioInternal failed - handle: ${handle}, path: ${audioPath}`, error);
+    logError(
+      `addAudioInternal failed - handle: ${handle}, path: ${audioPath}`,
+      error
+    );
     throw error;
   }
 }
@@ -326,7 +338,9 @@ async function processMultimodalContent(
   enableVisionModality: boolean,
   enableAudioModality: boolean
 ): Promise<void> {
-  log(`processMultimodalContent - handle: ${handle}, vision: ${enableVisionModality}, audio: ${enableAudioModality}`);
+  log(
+    `processMultimodalContent - handle: ${handle}, vision: ${enableVisionModality}, audio: ${enableAudioModality}`
+  );
   let imageCount = 0;
   let audioCount = 0;
 
@@ -370,7 +384,9 @@ async function processMultimodalContent(
   }
 
   if (imageCount > 0 || audioCount > 0) {
-    log(`processMultimodalContent complete - handle: ${handle}, images: ${imageCount}, audio: ${audioCount}`);
+    log(
+      `processMultimodalContent complete - handle: ${handle}, images: ${imageCount}, audio: ${audioCount}`
+    );
   }
 }
 
@@ -430,20 +446,27 @@ export async function generateText(
   options: GenerationOptions = {}
 ): Promise<GenerateTextResult> {
   const requestId = getNextRequestId();
-  log(`generateText called - modelId: ${model.id}, requestId: ${requestId}, messages:`, messages);
+  log(
+    `generateText called - modelId: ${model.id}, requestId: ${requestId}, messages:`,
+    messages
+  );
 
   const { abortSignal } = options;
 
   const handle = getHandleFromModel(model);
 
   if (abortSignal?.aborted) {
-    logError(`generateText aborted before start - modelId: ${model.id}, requestId: ${requestId}`);
+    logError(
+      `generateText aborted before start - modelId: ${model.id}, requestId: ${requestId}`
+    );
     throw new Error("Generation was aborted");
   }
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
-      log(`generateText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`);
+      log(
+        `generateText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`
+      );
       stopGeneration(model);
     });
   }
@@ -457,16 +480,20 @@ export async function generateText(
   );
 
   const prompt = messagesToPrompt(messages);
-  log(`generateText prompt - modelId: ${model.id}, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}`);
+  log(
+    `generateText prompt - modelId: ${
+      model.id
+    }, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${
+      prompt.length > 100 ? "..." : ""
+    }`
+  );
 
   try {
-    const text = await LitertLlm.generateResponse(
-      handle,
-      requestId,
-      prompt
-    );
+    const text = await LitertLlm.generateResponse(handle, requestId, prompt);
 
-    log(`generateText success - modelId: ${model.id}, requestId: ${requestId}, response length: ${text.length}`);
+    log(
+      `generateText success - modelId: ${model.id}, requestId: ${requestId}, response length: ${text.length}`
+    );
     return {
       text,
       finishReason: "stop",
@@ -476,7 +503,10 @@ export async function generateText(
       },
     };
   } catch (error) {
-    logError(`generateText failed - modelId: ${model.id}, requestId: ${requestId}`, error);
+    logError(
+      `generateText failed - modelId: ${model.id}, requestId: ${requestId}`,
+      error
+    );
     return {
       text: "",
       finishReason: "error",
@@ -572,10 +602,15 @@ export async function streamText(
   const { abortSignal } = options;
   const handle = getHandleFromModel(model);
   const requestId = getNextRequestId();
-  log(`streamText called - modelId: ${model.id}, requestId: ${requestId}, messages:`, messages);
+  log(
+    `streamText called - modelId: ${model.id}, requestId: ${requestId}, messages:`,
+    messages
+  );
 
   if (abortSignal?.aborted) {
-    logError(`streamText aborted before start - modelId: ${model.id}, requestId: ${requestId}`);
+    logError(
+      `streamText aborted before start - modelId: ${model.id}, requestId: ${requestId}`
+    );
     throw new Error("Generation was aborted");
   }
 
@@ -588,7 +623,13 @@ export async function streamText(
   );
 
   const prompt = messagesToPrompt(messages);
-  log(`streamText prompt - modelId: ${model.id}, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}`);
+  log(
+    `streamText prompt - modelId: ${
+      model.id
+    }, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${
+      prompt.length > 100 ? "..." : ""
+    }`
+  );
 
   // Shared state for both textStream and text Promise
   const queue: string[] = [];
@@ -625,7 +666,9 @@ export async function streamText(
         ev.handle === handle &&
         !(abortSignal?.aborted ?? false)
       ) {
-        logError(`streamText error response - modelId: ${model.id}, requestId: ${requestId}, error: ${ev.error}`);
+        logError(
+          `streamText error response - modelId: ${model.id}, requestId: ${requestId}, error: ${ev.error}`
+        );
         error = new Error(ev.error);
         cleanup();
         textReject!(error);
@@ -640,7 +683,9 @@ export async function streamText(
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
-      log(`streamText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`);
+      log(
+        `streamText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`
+      );
       isDone = true;
       cleanup();
     });
@@ -649,13 +694,18 @@ export async function streamText(
   // Start generation
   LitertLlm.generateResponseAsync(handle, requestId, prompt)
     .then(() => {
-      log(`streamText generation completed - modelId: ${model.id}, requestId: ${requestId}, total length: ${accumulatedText.length}`);
+      log(
+        `streamText generation completed - modelId: ${model.id}, requestId: ${requestId}, total length: ${accumulatedText.length}`
+      );
       isDone = true;
       cleanup();
       textResolve!(accumulatedText);
     })
     .catch((err) => {
-      logError(`streamText generation failed - modelId: ${model.id}, requestId: ${requestId}`, err);
+      logError(
+        `streamText generation failed - modelId: ${model.id}, requestId: ${requestId}`,
+        err
+      );
       isDone = true;
       cleanup();
       textReject!(err);
@@ -722,139 +772,6 @@ export async function stopGeneration(model: LLMModel): Promise<void> {
 }
 
 /**
- * Convert a Zod schema to JSON Schema format.
- * Supports Zod v4's toJsonSchema() or falls back to manual conversion for v3.
- */
-function zodToJsonSchema<T>(schema: ZodType<T, ZodTypeDef, unknown>): object {
-  // Check if the schema has a toJsonSchema method (Zod v4 style)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (typeof (schema as any).toJsonSchema === "function") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (schema as any).toJsonSchema();
-  }
-
-  // Try to use zod's z.toJsonSchema if available (Zod v4)
-  try {
-    // Dynamic import approach for Zod v4
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const { toJsonSchema } = require("zod/v4/json-schema");
-    if (typeof toJsonSchema === "function") {
-      return toJsonSchema(schema);
-    }
-  } catch {
-    // Zod v4 json-schema module not available, try alternative
-  }
-
-  // Try zod-to-json-schema package if available
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-    const zodToJsonSchemaLib = require("zod-to-json-schema");
-    if (zodToJsonSchemaLib && typeof zodToJsonSchemaLib.zodToJsonSchema === "function") {
-      return zodToJsonSchemaLib.zodToJsonSchema(schema);
-    }
-    if (typeof zodToJsonSchemaLib === "function") {
-      return zodToJsonSchemaLib(schema);
-    }
-  } catch {
-    // zod-to-json-schema not available
-  }
-
-  // Fallback: try to extract schema definition from Zod's internal structure
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const def = (schema as any)._def;
-  if (def) {
-    return convertZodDefToJsonSchema(def);
-  }
-
-  throw new Error(
-    "Could not convert Zod schema to JSON Schema. " +
-    "Please install 'zod-to-json-schema' package or use Zod v4 with 'zod/v4/json-schema'."
-  );
-}
-
-/**
- * Fallback converter for Zod schema definitions to JSON Schema.
- * This is a simplified converter that handles common cases.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function convertZodDefToJsonSchema(def: any): object {
-  const typeName = def.typeName;
-
-  switch (typeName) {
-    case "ZodObject": {
-      const properties: Record<string, object> = {};
-      const required: string[] = [];
-
-      if (def.shape) {
-        const shape = typeof def.shape === "function" ? def.shape() : def.shape;
-        for (const [key, value] of Object.entries(shape)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const fieldDef = (value as any)._def;
-          properties[key] = convertZodDefToJsonSchema(fieldDef);
-
-          // Check if field is optional
-          if (fieldDef.typeName !== "ZodOptional" && fieldDef.typeName !== "ZodNullable") {
-            required.push(key);
-          }
-        }
-      }
-
-      return {
-        type: "object",
-        properties,
-        ...(required.length > 0 ? { required } : {}),
-      };
-    }
-
-    case "ZodString":
-      return { type: "string" };
-
-    case "ZodNumber":
-      return { type: "number" };
-
-    case "ZodBoolean":
-      return { type: "boolean" };
-
-    case "ZodArray":
-      return {
-        type: "array",
-        items: def.type ? convertZodDefToJsonSchema(def.type._def) : {},
-      };
-
-    case "ZodEnum":
-      return {
-        type: "string",
-        enum: def.values,
-      };
-
-    case "ZodLiteral":
-      return {
-        const: def.value,
-      };
-
-    case "ZodOptional":
-    case "ZodNullable":
-      return convertZodDefToJsonSchema(def.innerType._def);
-
-    case "ZodDefault":
-      return {
-        ...convertZodDefToJsonSchema(def.innerType._def),
-        default: def.defaultValue(),
-      };
-
-    case "ZodUnion":
-      return {
-        oneOf: def.options.map((opt: { _def: unknown }) => convertZodDefToJsonSchema(opt._def)),
-      };
-
-    default:
-      // For unknown types, return a generic schema
-      log(`Unknown Zod type: ${typeName}, using generic schema`);
-      return {};
-  }
-}
-
-/**
  * Generate structured output from an LLM model using tool calling.
  * The model will be forced to output data matching the provided Zod schema.
  *
@@ -887,30 +804,39 @@ function convertZodDefToJsonSchema(def: any): object {
 export async function generateStructuredOutput<T>(
   model: LLMModel,
   messages: ModelMessage[],
-  schema: ZodType<T, ZodTypeDef, unknown>,
+  schema: z.ZodObject,
+  // schema: z4.core.$ZodType<T, any>,
   options: StructuredOutputOptions = {}
 ): Promise<GenerateStructuredOutputResult<T>> {
-  const { abortSignal, maxRetries = 3 } = options;
+  const { abortSignal, maxRetries = 3, systemPrompt } = options;
   const requestId = getNextRequestId();
 
-  log(`generateStructuredOutput called - modelId: ${model.id}, requestId: ${requestId}`);
+  log(
+    `generateStructuredOutput called - modelId: ${
+      model.id
+    }, requestId: ${requestId}, customSystemPrompt: ${!!systemPrompt}`
+  );
 
   const handle = getHandleFromModel(model);
 
   if (abortSignal?.aborted) {
-    logError(`generateStructuredOutput aborted before start - modelId: ${model.id}`);
+    logError(
+      `generateStructuredOutput aborted before start - modelId: ${model.id}`
+    );
     throw new Error("Generation was aborted");
   }
 
   // Convert Zod schema to JSON Schema
   let jsonSchema: object;
   try {
-    jsonSchema = zodToJsonSchema(schema);
+    jsonSchema = schema.toJSONSchema();
     log(`generateStructuredOutput - converted schema to JSON Schema`);
   } catch (error) {
     logError(`generateStructuredOutput - schema conversion failed`, error);
     throw new Error(
-      `Failed to convert Zod schema to JSON Schema: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to convert Zod schema to JSON Schema: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
   }
 
@@ -918,7 +844,12 @@ export async function generateStructuredOutput<T>(
   const prompt = messagesToPrompt(messages);
   const jsonSchemaString = JSON.stringify(jsonSchema);
 
-  log(`generateStructuredOutput - schema: ${jsonSchemaString.substring(0, 200)}...`);
+  log(
+    `generateStructuredOutput - schema: ${jsonSchemaString.substring(
+      0,
+      200
+    )}...`
+  );
 
   let lastError: Error | null = null;
   let attempts = 0;
@@ -934,15 +865,26 @@ export async function generateStructuredOutput<T>(
     try {
       log(`generateStructuredOutput - attempt ${attempts}/${maxRetries}`);
 
+      // Build system prompt with schema placeholder replacement
+      const finalSystemPrompt = systemPrompt
+        ? systemPrompt.replace("{{schema}}", jsonSchemaString)
+        : undefined;
+
       // Call native structured output generation
       const rawJson = await LitertLlm.generateStructuredOutput(
         handle,
         requestId,
         prompt,
-        jsonSchemaString
+        jsonSchemaString,
+        finalSystemPrompt
       );
 
-      log(`generateStructuredOutput - received raw JSON: ${rawJson.substring(0, 200)}...`);
+      log(
+        `generateStructuredOutput - received raw JSON: ${rawJson.substring(
+          0,
+          200
+        )}...`
+      );
 
       // Parse the JSON
       let parsedData: unknown;
@@ -958,9 +900,11 @@ export async function generateStructuredOutput<T>(
       const validationResult = schema.safeParse(parsedData);
 
       if (validationResult.success) {
-        log(`generateStructuredOutput - validation successful on attempt ${attempts}`);
+        log(
+          `generateStructuredOutput - validation successful on attempt ${attempts}`
+        );
         return {
-          data: validationResult.data,
+          data: validationResult.data as T,
           rawJson,
           attempts,
           finishReason: "stop",
@@ -968,11 +912,13 @@ export async function generateStructuredOutput<T>(
       } else {
         // Validation failed
         const zodError = validationResult.error;
-        const errorMessage = zodError.errors
+        const errorMessage = zodError.issues
           .map((e) => `${e.path.join(".")}: ${e.message}`)
           .join(", ");
 
-        logError(`generateStructuredOutput - validation failed: ${errorMessage}`);
+        logError(
+          `generateStructuredOutput - validation failed: ${errorMessage}`
+        );
         lastError = new Error(`Schema validation failed: ${errorMessage}`);
 
         // If we have retries left, continue
@@ -982,7 +928,10 @@ export async function generateStructuredOutput<T>(
         }
       }
     } catch (error) {
-      logError(`generateStructuredOutput - generation error on attempt ${attempts}`, error);
+      logError(
+        `generateStructuredOutput - generation error on attempt ${attempts}`,
+        error
+      );
       lastError = error instanceof Error ? error : new Error(String(error));
 
       // If it's an unsupported operation error, don't retry
@@ -1002,7 +951,10 @@ export async function generateStructuredOutput<T>(
   }
 
   // All retries exhausted
-  logError(`generateStructuredOutput - all ${maxRetries} attempts failed`, lastError);
+  logError(
+    `generateStructuredOutput - all ${maxRetries} attempts failed`,
+    lastError
+  );
 
   return {
     data: {} as T, // Empty data on failure

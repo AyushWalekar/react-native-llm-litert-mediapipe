@@ -181,13 +181,15 @@ export interface LitertLlmModuleInterface {
    * @param requestId Request identifier for tracking
    * @param prompt The user prompt
    * @param outputSchema JSON Schema string defining the expected output structure
+   * @param systemPrompt Optional custom system prompt (empty string uses default)
    * @returns JSON string containing the structured output matching the schema
    */
   generateStructuredOutput(
     handle: number,
     requestId: number,
     prompt: string,
-    outputSchema: string
+    outputSchema: string,
+    systemPrompt?: string
   ): Promise<string>;
 
   /**

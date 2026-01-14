@@ -641,6 +641,7 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
      * @param requestId Request identifier for tracking
      * @param prompt The user prompt
      * @param outputSchema JSON Schema string defining the expected output structure
+     * @param systemPrompt Optional custom system prompt (empty string uses default)
      * @param promise React Native promise to resolve with the structured JSON output
      */
     @ReactMethod
@@ -649,6 +650,7 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         requestId: Int,
         prompt: String,
         outputSchema: String,
+        systemPrompt: String,
         promise: Promise
     ) {
         try {
@@ -661,13 +663,19 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
             sendEvent("logging", mapOf(
                 "handle" to handle,
                 "requestId" to requestId,
-                "message" to "Starting structured output generation with schema length: ${outputSchema.length}"
+                "message" to "Starting structured output generation with schema length: ${outputSchema.length}, customSystemPrompt: ${systemPrompt.isNotEmpty()}"
             ))
 
             // Run on IO thread to avoid blocking the main thread
             coroutineScope.launch {
                 try {
-                    val result = engine.generateStructuredOutput(requestId, prompt, outputSchema)
+                    // Pass systemPrompt to engine (empty string means use default)
+                    val result = engine.generateStructuredOutput(
+                        requestId,
+                        prompt,
+                        outputSchema,
+                        systemPrompt.ifEmpty { null }
+                    )
 
                     sendEvent("logging", mapOf(
                         "handle" to handle,

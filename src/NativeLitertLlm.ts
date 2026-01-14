@@ -156,13 +156,15 @@ const LitertLlm: LitertLlmModuleInterface = {
     handle: number,
     requestId: number,
     prompt: string,
-    outputSchema: string
+    outputSchema: string,
+    systemPrompt?: string
   ): Promise<string> => {
     return LitertLlmNative.generateStructuredOutput(
       handle,
       requestId,
       prompt,
-      outputSchema
+      outputSchema,
+      systemPrompt ?? ""
     );
   },
 
