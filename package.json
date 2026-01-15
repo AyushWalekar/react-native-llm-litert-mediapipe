@@ -51,11 +51,18 @@
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
     "react-native": "^0.79.6",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "zod": "^4.3.5"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
-    "react-native": ">=0.70.0"
+    "react-native": ">=0.70.0",
+    "zod": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
   },
   "platforms": {
     "ios": "14.0",

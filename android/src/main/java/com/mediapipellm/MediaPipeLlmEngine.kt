@@ -195,4 +195,20 @@ class MediaPipeLlmEngine(
             inferenceListener?.logging("Error closing resources: ${e.message}")
         }
     }
+
+    /**
+     * Structured output is not supported by MediaPipe tasks-genai.
+     * This feature requires LiteRT-LM models (.litertlm files).
+     */
+    override fun generateStructuredOutput(
+        requestId: Int,
+        prompt: String,
+        outputSchema: String,
+        systemPrompt: String?
+    ): String {
+        throw UnsupportedOperationException(
+            "Structured output is only supported with LiteRT-LM models (.litertlm files). " +
+            "MediaPipe .task models do not support tool calling required for structured output."
+        )
+    }
 }

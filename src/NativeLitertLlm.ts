@@ -152,6 +152,22 @@ const LitertLlm: LitertLlmModuleInterface = {
     return LitertLlmNative.stopGeneration(handle);
   },
 
+  generateStructuredOutput: (
+    handle: number,
+    requestId: number,
+    prompt: string,
+    outputSchema: string,
+    systemPrompt?: string
+  ): Promise<string> => {
+    return LitertLlmNative.generateStructuredOutput(
+      handle,
+      requestId,
+      prompt,
+      outputSchema,
+      systemPrompt ?? ""
+    );
+  },
+
   // Event methods - adapted to use NativeEventEmitter
   addListener: <EventName extends keyof LitertLlmModuleEvents>(
     eventName: EventName,

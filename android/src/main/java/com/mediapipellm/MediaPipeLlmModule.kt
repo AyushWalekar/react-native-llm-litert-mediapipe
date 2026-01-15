@@ -9,6 +9,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
 import java.io.BufferedInputStream
 
 private const val TAG = "MediaPipeLlm"
@@ -628,6 +629,94 @@ class MediaPipeLlmModule(reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping generation: ${e.message}", e)
             promise.reject("ERR_STOP_GENERATION", "Failed to stop generation: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Generate structured output using tool calling.
+     * The model will be forced to call a tool with parameters matching the provided JSON schema.
+     * Only supported with LiteRT-LM models (.litertlm files).
+     *
+     * @param handle Model handle
+     * @param requestId Request identifier for tracking
+     * @param prompt The user prompt
+     * @param outputSchema JSON Schema string defining the expected output structure
+     * @param systemPrompt Optional custom system prompt (empty string uses default)
+     * @param promise React Native promise to resolve with the structured JSON output
+     */
+    @ReactMethod
+    fun generateStructuredOutput(
+        handle: Int,
+        requestId: Int,
+        prompt: String,
+        outputSchema: String,
+        systemPrompt: String,
+        promise: Promise
+    ) {
+        try {
+            val engine = engineMap[handle]
+            if (engine == null) {
+                promise.reject("INVALID_HANDLE", "No model found for handle $handle", null)
+                return
+            }
+
+            sendEvent("logging", mapOf(
+                "handle" to handle,
+                "requestId" to requestId,
+                "message" to "Starting structured output generation with schema length: ${outputSchema.length}, customSystemPrompt: ${systemPrompt.isNotEmpty()}"
+            ))
+
+            // Run on IO thread to avoid blocking the main thread
+            coroutineScope.launch {
+                try {
+                    // Pass systemPrompt to engine (empty string means use default)
+                    val result = engine.generateStructuredOutput(
+                        requestId,
+                        prompt,
+                        outputSchema,
+                        systemPrompt.ifEmpty { null }
+                    )
+
+                    sendEvent("logging", mapOf(
+                        "handle" to handle,
+                        "requestId" to requestId,
+                        "message" to "Structured output generation completed successfully"
+                    ))
+
+                    withContext(Dispatchers.Main) {
+                        promise.resolve(result)
+                    }
+                } catch (e: UnsupportedOperationException) {
+                    sendEvent("logging", mapOf(
+                        "handle" to handle,
+                        "requestId" to requestId,
+                        "message" to "Structured output not supported: ${e.message}"
+                    ))
+                    withContext(Dispatchers.Main) {
+                        promise.reject(
+                            "UNSUPPORTED_OPERATION",
+                            e.message ?: "Structured output is not supported for this model type",
+                            e
+                        )
+                    }
+                } catch (e: Exception) {
+                    sendEvent("logging", mapOf(
+                        "handle" to handle,
+                        "requestId" to requestId,
+                        "message" to "Structured output generation failed: ${e.message}"
+                    ))
+                    withContext(Dispatchers.Main) {
+                        promise.reject(
+                            "STRUCTURED_OUTPUT_FAILED",
+                            e.message ?: "Failed to generate structured output",
+                            e
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in generateStructuredOutput: ${e.message}", e)
+            promise.reject("STRUCTURED_OUTPUT_ERROR", e.message ?: "Unknown error", e)
         }
     }
 

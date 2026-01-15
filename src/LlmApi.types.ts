@@ -163,3 +163,42 @@ export interface LLMModel {
   /** Add audio to the session for multimodal inference */
   addAudio?: (audioPath: string) => Promise<boolean>;
 }
+
+/**
+ * Options for generateStructuredOutput
+ */
+export interface StructuredOutputOptions {
+  /** Abort signal to cancel generation */
+  abortSignal?: AbortSignal;
+  /** Maximum retry attempts if validation fails (default: 3) */
+  maxRetries?: number;
+  /**
+   * Custom system prompt for structured output generation.
+   * If not provided, a default prompt will be used that instructs the model
+   * to call the structured_output function with JSON matching the schema.
+   *
+   * The placeholder {{schema}} will be replaced with the JSON schema string.
+   *
+   * @example
+   * ```typescript
+   * systemPrompt: `You are a data extraction assistant.
+   * Extract information and call structured_output with JSON matching this schema:
+   * {{schema}}`
+   * ```
+   */
+  systemPrompt?: string;
+}
+
+/**
+ * Result from generateStructuredOutput
+ */
+export interface GenerateStructuredOutputResult<T> {
+  /** The validated, typed structured data */
+  data: T;
+  /** The raw JSON string from the model */
+  rawJson: string;
+  /** Number of attempts made */
+  attempts: number;
+  /** The finish reason */
+  finishReason: "stop" | "error" | "validation_failed";
+}

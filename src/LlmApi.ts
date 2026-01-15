@@ -11,6 +11,8 @@ import {
   GenerateTextResult,
   StreamTextResult,
   LLMModel,
+  StructuredOutputOptions,
+  GenerateStructuredOutputResult,
 } from "./LlmApi.types";
 import type { MultimodalOptions } from "./LitertLlm.types";
 import type {
@@ -18,6 +20,7 @@ import type {
   ErrorResponseEventPayload,
   LoggingEventPayload,
 } from "./LitertLlm.types";
+import { z } from "zod";
 
 let nextModelId = 1;
 
@@ -38,10 +41,16 @@ function enableNativeLogging() {
   if (loggingSubscription) return;
 
   try {
-    loggingSubscription = LitertLlm.addListener("logging", (ev: LoggingEventPayload) => {
-      const prefix = ev.handle !== undefined ? `[Native][Handle:${ev.handle}] ` : "[Native] ";
-      console.log(`${LOG_PREFIX} ${prefix}${ev.message}`);
-    });
+    loggingSubscription = LitertLlm.addListener(
+      "logging",
+      (ev: LoggingEventPayload) => {
+        const prefix =
+          ev.handle !== undefined
+            ? `[Native][Handle:${ev.handle}] `
+            : "[Native] ";
+        console.log(`${LOG_PREFIX} ${prefix}${ev.message}`);
+      }
+    );
     log("Native logging enabled");
   } catch (error) {
     logError("Failed to enable native logging", error);
@@ -252,7 +261,10 @@ async function addImageInternal(
     log(`addImageInternal success - handle: ${handle}`);
     return result;
   } catch (error) {
-    logError(`addImageInternal failed - handle: ${handle}, path: ${imagePath}`, error);
+    logError(
+      `addImageInternal failed - handle: ${handle}, path: ${imagePath}`,
+      error
+    );
     throw error;
   }
 }
@@ -267,7 +279,10 @@ async function addAudioInternal(
     log(`addAudioInternal success - handle: ${handle}`);
     return result;
   } catch (error) {
-    logError(`addAudioInternal failed - handle: ${handle}, path: ${audioPath}`, error);
+    logError(
+      `addAudioInternal failed - handle: ${handle}, path: ${audioPath}`,
+      error
+    );
     throw error;
   }
 }
@@ -323,7 +338,9 @@ async function processMultimodalContent(
   enableVisionModality: boolean,
   enableAudioModality: boolean
 ): Promise<void> {
-  log(`processMultimodalContent - handle: ${handle}, vision: ${enableVisionModality}, audio: ${enableAudioModality}`);
+  log(
+    `processMultimodalContent - handle: ${handle}, vision: ${enableVisionModality}, audio: ${enableAudioModality}`
+  );
   let imageCount = 0;
   let audioCount = 0;
 
@@ -367,7 +384,9 @@ async function processMultimodalContent(
   }
 
   if (imageCount > 0 || audioCount > 0) {
-    log(`processMultimodalContent complete - handle: ${handle}, images: ${imageCount}, audio: ${audioCount}`);
+    log(
+      `processMultimodalContent complete - handle: ${handle}, images: ${imageCount}, audio: ${audioCount}`
+    );
   }
 }
 
@@ -427,20 +446,27 @@ export async function generateText(
   options: GenerationOptions = {}
 ): Promise<GenerateTextResult> {
   const requestId = getNextRequestId();
-  log(`generateText called - modelId: ${model.id}, requestId: ${requestId}, messages:`, messages);
+  log(
+    `generateText called - modelId: ${model.id}, requestId: ${requestId}, messages:`,
+    messages
+  );
 
   const { abortSignal } = options;
 
   const handle = getHandleFromModel(model);
 
   if (abortSignal?.aborted) {
-    logError(`generateText aborted before start - modelId: ${model.id}, requestId: ${requestId}`);
+    logError(
+      `generateText aborted before start - modelId: ${model.id}, requestId: ${requestId}`
+    );
     throw new Error("Generation was aborted");
   }
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
-      log(`generateText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`);
+      log(
+        `generateText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`
+      );
       stopGeneration(model);
     });
   }
@@ -454,16 +480,20 @@ export async function generateText(
   );
 
   const prompt = messagesToPrompt(messages);
-  log(`generateText prompt - modelId: ${model.id}, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}`);
+  log(
+    `generateText prompt - modelId: ${
+      model.id
+    }, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${
+      prompt.length > 100 ? "..." : ""
+    }`
+  );
 
   try {
-    const text = await LitertLlm.generateResponse(
-      handle,
-      requestId,
-      prompt
-    );
+    const text = await LitertLlm.generateResponse(handle, requestId, prompt);
 
-    log(`generateText success - modelId: ${model.id}, requestId: ${requestId}, response length: ${text.length}`);
+    log(
+      `generateText success - modelId: ${model.id}, requestId: ${requestId}, response length: ${text.length}`
+    );
     return {
       text,
       finishReason: "stop",
@@ -473,7 +503,10 @@ export async function generateText(
       },
     };
   } catch (error) {
-    logError(`generateText failed - modelId: ${model.id}, requestId: ${requestId}`, error);
+    logError(
+      `generateText failed - modelId: ${model.id}, requestId: ${requestId}`,
+      error
+    );
     return {
       text: "",
       finishReason: "error",
@@ -569,10 +602,15 @@ export async function streamText(
   const { abortSignal } = options;
   const handle = getHandleFromModel(model);
   const requestId = getNextRequestId();
-  log(`streamText called - modelId: ${model.id}, requestId: ${requestId}, messages:`, messages);
+  log(
+    `streamText called - modelId: ${model.id}, requestId: ${requestId}, messages:`,
+    messages
+  );
 
   if (abortSignal?.aborted) {
-    logError(`streamText aborted before start - modelId: ${model.id}, requestId: ${requestId}`);
+    logError(
+      `streamText aborted before start - modelId: ${model.id}, requestId: ${requestId}`
+    );
     throw new Error("Generation was aborted");
   }
 
@@ -585,7 +623,13 @@ export async function streamText(
   );
 
   const prompt = messagesToPrompt(messages);
-  log(`streamText prompt - modelId: ${model.id}, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}`);
+  log(
+    `streamText prompt - modelId: ${
+      model.id
+    }, requestId: ${requestId}, prompt: ${prompt.substring(0, 100)}${
+      prompt.length > 100 ? "..." : ""
+    }`
+  );
 
   // Shared state for both textStream and text Promise
   const queue: string[] = [];
@@ -622,7 +666,9 @@ export async function streamText(
         ev.handle === handle &&
         !(abortSignal?.aborted ?? false)
       ) {
-        logError(`streamText error response - modelId: ${model.id}, requestId: ${requestId}, error: ${ev.error}`);
+        logError(
+          `streamText error response - modelId: ${model.id}, requestId: ${requestId}, error: ${ev.error}`
+        );
         error = new Error(ev.error);
         cleanup();
         textReject!(error);
@@ -637,7 +683,9 @@ export async function streamText(
 
   if (abortSignal) {
     abortSignal.addEventListener("abort", () => {
-      log(`streamText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`);
+      log(
+        `streamText abort signal triggered - modelId: ${model.id}, requestId: ${requestId}`
+      );
       isDone = true;
       cleanup();
     });
@@ -646,13 +694,18 @@ export async function streamText(
   // Start generation
   LitertLlm.generateResponseAsync(handle, requestId, prompt)
     .then(() => {
-      log(`streamText generation completed - modelId: ${model.id}, requestId: ${requestId}, total length: ${accumulatedText.length}`);
+      log(
+        `streamText generation completed - modelId: ${model.id}, requestId: ${requestId}, total length: ${accumulatedText.length}`
+      );
       isDone = true;
       cleanup();
       textResolve!(accumulatedText);
     })
     .catch((err) => {
-      logError(`streamText generation failed - modelId: ${model.id}, requestId: ${requestId}`, err);
+      logError(
+        `streamText generation failed - modelId: ${model.id}, requestId: ${requestId}`,
+        err
+      );
       isDone = true;
       cleanup();
       textReject!(err);
@@ -716,4 +769,197 @@ export async function stopGeneration(model: LLMModel): Promise<void> {
     logError(`stopGeneration failed - modelId: ${model.id}`, error);
     throw error;
   }
+}
+
+/**
+ * Generate structured output from an LLM model using tool calling.
+ * The model will be forced to output data matching the provided Zod schema.
+ *
+ * @param model The loaded LLM model (must be a LiteRT-LM model)
+ * @param messages Array of messages for context
+ * @param schema Zod schema defining the expected output structure
+ * @param options Optional configuration (abortSignal, maxRetries)
+ * @returns Promise resolving to typed, validated structured data
+ *
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ *
+ * const SentimentSchema = z.object({
+ *   sentiment: z.enum(['positive', 'negative', 'neutral']),
+ *   confidence: z.number().min(0).max(1),
+ *   keywords: z.array(z.string()),
+ * });
+ *
+ * const result = await generateStructuredOutput(
+ *   model,
+ *   [{ role: 'user', content: 'Analyze: "I love this product!"' }],
+ *   SentimentSchema
+ * );
+ *
+ * console.log(result.data.sentiment); // 'positive'
+ * console.log(result.data.confidence); // 0.95
+ * ```
+ */
+export async function generateStructuredOutput<T>(
+  model: LLMModel,
+  messages: ModelMessage[],
+  schema: z.ZodObject,
+  // schema: z4.core.$ZodType<T, any>,
+  options: StructuredOutputOptions = {}
+): Promise<GenerateStructuredOutputResult<T>> {
+  const { abortSignal, maxRetries = 3, systemPrompt } = options;
+  const requestId = getNextRequestId();
+
+  log(
+    `generateStructuredOutput called - modelId: ${
+      model.id
+    }, requestId: ${requestId}, customSystemPrompt: ${!!systemPrompt}`
+  );
+
+  const handle = getHandleFromModel(model);
+
+  if (abortSignal?.aborted) {
+    logError(
+      `generateStructuredOutput aborted before start - modelId: ${model.id}`
+    );
+    throw new Error("Generation was aborted");
+  }
+
+  // Convert Zod schema to JSON Schema
+  let jsonSchema: object;
+  try {
+    jsonSchema = schema.toJSONSchema();
+    log(`generateStructuredOutput - converted schema to JSON Schema`);
+  } catch (error) {
+    logError(`generateStructuredOutput - schema conversion failed`, error);
+    throw new Error(
+      `Failed to convert Zod schema to JSON Schema: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
+  // Build prompt from messages
+  const prompt = messagesToPrompt(messages);
+  const jsonSchemaString = JSON.stringify(jsonSchema);
+
+  log(
+    `generateStructuredOutput - schema: ${jsonSchemaString.substring(
+      0,
+      200
+    )}...`
+  );
+
+  let lastError: Error | null = null;
+  let attempts = 0;
+
+  // Retry loop for validation failures
+  while (attempts < maxRetries) {
+    attempts++;
+
+    if (abortSignal?.aborted) {
+      throw new Error("Generation was aborted");
+    }
+
+    try {
+      log(`generateStructuredOutput - attempt ${attempts}/${maxRetries}`);
+
+      // Build system prompt with schema placeholder replacement
+      const finalSystemPrompt = systemPrompt
+        ? systemPrompt.replace("{{schema}}", jsonSchemaString)
+        : undefined;
+
+      // Call native structured output generation
+      const rawJson = await LitertLlm.generateStructuredOutput(
+        handle,
+        requestId,
+        prompt,
+        jsonSchemaString,
+        finalSystemPrompt
+      );
+
+      log(
+        `generateStructuredOutput - received raw JSON: ${rawJson.substring(
+          0,
+          200
+        )}...`
+      );
+
+      // Parse the JSON
+      let parsedData: unknown;
+      try {
+        parsedData = JSON.parse(rawJson);
+      } catch (parseError) {
+        logError(`generateStructuredOutput - JSON parse failed`, parseError);
+        lastError = new Error(`Invalid JSON response: ${parseError}`);
+        continue; // Retry
+      }
+
+      // Validate with Zod schema
+      const validationResult = schema.safeParse(parsedData);
+
+      if (validationResult.success) {
+        log(
+          `generateStructuredOutput - validation successful on attempt ${attempts}`
+        );
+        return {
+          data: validationResult.data as T,
+          rawJson,
+          attempts,
+          finishReason: "stop",
+        };
+      } else {
+        // Validation failed
+        const zodError = validationResult.error;
+        const errorMessage = zodError.issues
+          .map((e) => `${e.path.join(".")}: ${e.message}`)
+          .join(", ");
+
+        logError(
+          `generateStructuredOutput - validation failed: ${errorMessage}`
+        );
+        lastError = new Error(`Schema validation failed: ${errorMessage}`);
+
+        // If we have retries left, continue
+        if (attempts < maxRetries) {
+          log(`generateStructuredOutput - retrying due to validation failure`);
+          continue;
+        }
+      }
+    } catch (error) {
+      logError(
+        `generateStructuredOutput - generation error on attempt ${attempts}`,
+        error
+      );
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // If it's an unsupported operation error, don't retry
+      if (
+        error instanceof Error &&
+        (error.message.includes("UNSUPPORTED_OPERATION") ||
+          error.message.includes("not supported"))
+      ) {
+        throw error;
+      }
+
+      // Continue to retry for other errors
+      if (attempts < maxRetries) {
+        continue;
+      }
+    }
+  }
+
+  // All retries exhausted
+  logError(
+    `generateStructuredOutput - all ${maxRetries} attempts failed`,
+    lastError
+  );
+
+  return {
+    data: {} as T, // Empty data on failure
+    rawJson: "",
+    attempts,
+    finishReason: "validation_failed",
+  };
 }
