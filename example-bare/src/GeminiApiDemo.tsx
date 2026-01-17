@@ -20,6 +20,9 @@ import {generateText, streamText, generateObject, Output} from 'ai';
 import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import {z} from 'zod';
 import {createOpenAI} from '@ai-sdk/openai';
+import {fetch as streamingFetch} from 'react-native-fetch-api';
+import Config from 'react-native-config';
+import {OPENAI_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY} from '@env';
 
 const SentimentSchema = z.object({
   sentiment: z.enum(['positive', 'negative', 'neutral']),
@@ -29,8 +32,26 @@ const SentimentSchema = z.object({
 });
 
 type SentimentResult = z.infer<typeof SentimentSchema>;
+console.log('Using OpenAI API Key env:', OPENAI_API_KEY);
 
-const model = openai('gpt-5-mini');
+const google = createGoogleGenerativeAI({
+  apiKey: GOOGLE_GENERATIVE_AI_API_KEY,
+});
+
+// Regular provider for generateText and generateObject
+const openai = createOpenAI({
+  apiKey: OPENAI_API_KEY,
+});
+
+// Streaming-enabled provider for streamText
+const openaiStreaming = createOpenAI({
+  apiKey: OPENAI_API_KEY,
+  fetch: (url, options) =>
+    streamingFetch(url, {...options, reactNative: {textStreaming: true}}),
+});
+
+const model = openai('gpt-4o-mini');
+const streamingModel = openaiStreaming('gpt-4o-mini');
 
 const THEME = {
   gradient: ['#f5e09aff', '#fcede9ff'],
@@ -133,35 +154,22 @@ export default function GeminiApiDemo() {
         text: prompt,
       });
 
-      const result = await streamText({
-        model: model,
+      const result = streamText({
+        model: streamingModel,
         messages: [
           {
             role: 'user',
             content,
           },
         ],
-        onError: ({error}) => {
-          console.error('Stream error1:', error); // Debug log
-        },
       });
 
-      const tmp = result.toTextStreamResponse({
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Content-Encoding': 'none',
-        },
-      });
-      console.log('Temp result:', tmp); // Debug log
-
-      console.log('Streaming result:', result); // Debug log
-      const testRes = await result.text;
-      console.log('Test result:', testRes); // Debug log
+      // Iterate over the text stream to get incremental updates
       for await (const textPart of result.textStream) {
         setResponse(prev => prev + textPart);
       }
     } catch (error) {
-      console.error('Streaming error:', error); // Debug log
+      console.error('Streaming error:', error);
       Alert.alert(
         'Error',
         `Streaming failed: ${
