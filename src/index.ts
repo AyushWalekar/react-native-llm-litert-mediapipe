@@ -25,3 +25,13 @@ export * from "./LitertLlm.types";
 
 // Model Manager for download management
 export { ModelManager, modelManager, type ModelInfo } from "./ModelManager";
+
+// AI SDK Provider exports (for convenience, also available via /ai-sdk subpath)
+export {
+  createMediaPipeLlm,
+  MediaPipeLlmLanguageModel,
+  type MediaPipeLlmProvider,
+  type MediaPipeLlmProviderSettings,
+  type MediaPipeLlmModelId,
+  type MediaPipeLlmModelSettings,
+} from "./ai-sdk-provider";

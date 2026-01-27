@@ -7,6 +7,22 @@
   "types": "lib/index.d.ts",
   "react-native": "src/index.ts",
   "source": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "require": "./lib/index.js",
+      "react-native": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./ai-sdk": {
+      "types": "./lib/ai-sdk-provider/index.d.ts",
+      "import": "./lib/ai-sdk-provider/index.js",
+      "require": "./lib/ai-sdk-provider/index.js",
+      "react-native": "./src/ai-sdk-provider/index.ts",
+      "default": "./lib/ai-sdk-provider/index.js"
+    }
+  },
   "files": [
     "src",
     "lib",
@@ -48,18 +64,28 @@
   "license": "MIT",
   "homepage": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe#readme",
   "devDependencies": {
+    "@ai-sdk/provider": "^3.0.4",
     "@types/react": "^19.0.0",
+    "ai": "^6.0.0",
     "react": "^19.0.0",
     "react-native": "^0.79.6",
     "typescript": "^5.0.0",
     "zod": "^4.3.5"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": ">=3.0.0",
+    "ai": ">=4.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.70.0",
-    "zod": ">=4.0.0"
+    "zod": ">=3.0.0 || >=4.0.0"
   },
   "peerDependenciesMeta": {
+    "@ai-sdk/provider": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
     "zod": {
       "optional": true
     }
