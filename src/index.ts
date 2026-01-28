@@ -42,3 +42,11 @@ export {
   patchURLProtocol,
   needsURLProtocolPatch,
 } from "./polyfills/patch-url-protocol";
+
+export {
+  patchReadableStreamAsyncIterator,
+  needsReadableStreamAsyncIteratorPatch,
+  makeAsyncIterable,
+  streamToAsyncGenerator,
+  type AsyncIterableStream,
+} from "./polyfills/patch-readable-stream-async-iterator";

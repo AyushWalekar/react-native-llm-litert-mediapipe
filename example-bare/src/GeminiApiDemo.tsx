@@ -16,13 +16,14 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 
 import {createGoogleGenerativeAI} from '@ai-sdk/google';
-import {generateText, streamText, generateObject, Output} from 'ai';
+import {generateText, streamText, Output} from 'ai';
 import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import {z} from 'zod';
 import {createOpenAI} from '@ai-sdk/openai';
 import {fetch as streamingFetch} from 'react-native-fetch-api';
 import Config from 'react-native-config';
 import {OPENAI_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY} from '@env';
+import {streamToAsyncGenerator} from 'react-native-llm-litert-mediapipe';
 
 const SentimentSchema = z.object({
   sentiment: z.enum(['positive', 'negative', 'neutral']),
@@ -154,6 +155,7 @@ export default function GeminiApiDemo() {
         text: prompt,
       });
 
+      console.log('[Debug] Starting streamText call...');
       const result = streamText({
         model: streamingModel,
         messages: [
@@ -164,12 +166,37 @@ export default function GeminiApiDemo() {
         ],
       });
 
-      // Iterate over the text stream to get incremental updates
-      for await (const textPart of result.textStream) {
-        setResponse(prev => prev + textPart);
+      // Try using fullStream instead to get more insight into the error
+      console.log('[Debug] Trying fullStream...');
+      const fullStream = result.fullStream;
+      console.log('[Debug] fullStream type:', typeof fullStream);
+      console.log(
+        '[Debug] fullStream constructor:',
+        fullStream?.constructor?.name,
+      );
+
+      // Use streamToAsyncGenerator to wrap the fullStream for async iteration
+      for await (const part of streamToAsyncGenerator(fullStream)) {
+        console.log('[Debug] Received part:', JSON.stringify(part));
+        if (part.type === 'text-delta') {
+          setResponse(prev => prev + part.text);
+        } else if (part.type === 'error') {
+          console.error('[Debug] Stream error part:', part);
+        }
       }
+      console.log('[Debug] Stream completed successfully');
     } catch (error) {
       console.error('Streaming error:', error);
+      // Log full error details for debugging
+      if (error && typeof error === 'object') {
+        console.error('Error name:', (error as any).name);
+        console.error('Error message:', (error as any).message);
+        console.error('Error cause:', (error as any).cause);
+        console.error('Error stack:', (error as any).stack);
+        if ((error as any).responseBody) {
+          console.error('Response body:', (error as any).responseBody);
+        }
+      }
       Alert.alert(
         'Error',
         `Streaming failed: ${
@@ -399,8 +426,8 @@ export default function GeminiApiDemo() {
                               structuredResult.sentiment === 'positive'
                                 ? '#27ae60'
                                 : structuredResult.sentiment === 'negative'
-                                ? '#e74c3c'
-                                : '#f39c12',
+                                  ? '#e74c3c'
+                                  : '#f39c12',
                           },
                         ]}>
                         {structuredResult.sentiment.toUpperCase()}

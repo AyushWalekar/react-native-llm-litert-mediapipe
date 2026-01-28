@@ -37,6 +37,64 @@ import { mapFinishReason } from "./map-finish-reason";
 const LOG_PREFIX = "[MediaPipeLlm]";
 
 /**
+ * Creates a ReadableStream with proper async iterator support.
+ * This is needed because React Native's polyfilled streams may not properly
+ * support Symbol.asyncIterator, causing "Object is not async iterable" errors.
+ */
+function createAsyncIterableReadableStream<T>(
+  asyncGenerator: () => AsyncGenerator<T, void, unknown>,
+): ReadableStream<T> {
+  const generator = asyncGenerator();
+
+  const stream = new ReadableStream<T>({
+    async pull(controller) {
+      try {
+        const { done, value } = await generator.next();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel() {
+      generator.return?.();
+    },
+  });
+
+  // Explicitly add Symbol.asyncIterator to ensure async iteration works
+  // This is the key fix for React Native environments where the polyfill
+  // may not properly support this symbol
+  const asyncIterableStream = stream as ReadableStream<T> & AsyncIterable<T>;
+  (asyncIterableStream as unknown as Record<symbol, unknown>)[
+    Symbol.asyncIterator
+  ] = function (this: ReadableStream<T>) {
+    const reader = this.getReader();
+    return {
+      async next(): Promise<IteratorResult<T>> {
+        const { done, value } = await reader.read();
+        if (done) {
+          reader.releaseLock();
+          return { done: true, value: undefined as unknown as T };
+        }
+        return { done: false, value };
+      },
+      async return(): Promise<IteratorResult<T>> {
+        reader.releaseLock();
+        return { done: true, value: undefined as unknown as T };
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
+  };
+
+  return asyncIterableStream;
+}
+
+/**
  * Create a properly structured usage object for AI SDK V3
  */
 function createUsage(
@@ -350,78 +408,75 @@ export class MediaPipeLlmLanguageModel implements LanguageModelV3 {
   ): Promise<LanguageModelV3StreamResult> {
     const model = await this.ensureModelLoaded();
     const messages = convertPromptToMessages(options.prompt);
-    const warnings: SharedV3Warning[] = [];
-
-    // Create a TransformStream for AI SDK compatibility
-    const { readable, writable } = new TransformStream<
-      LanguageModelV3StreamPart,
-      LanguageModelV3StreamPart
-    >();
-
-    const writer = writable.getWriter();
 
     // Generate a unique ID for the text content
     const textId = `text-${Date.now()}`;
 
-    // Start streaming in background
-    (async () => {
-      try {
-        const streamResult = await nativeStreamText(model, messages, {
-          abortSignal: options.abortSignal,
-        });
-
-        // Emit stream start
-        await writer.write({
-          type: "stream-start",
-          warnings: [],
-        });
-
-        // Emit text start
-        await writer.write({
-          type: "text-start",
-          id: textId,
-        });
-
-        let totalText = "";
-
-        // Stream text chunks as deltas
-        for await (const chunk of streamResult.textStream) {
-          totalText += chunk;
-          await writer.write({
-            type: "text-delta",
-            id: textId,
-            delta: chunk,
+    // Create a ReadableStream with proper async iterator support
+    // This avoids issues with React Native's polyfilled TransformStream
+    // not properly supporting Symbol.asyncIterator
+    const self = this;
+    const stream = createAsyncIterableReadableStream<LanguageModelV3StreamPart>(
+      async function* (): AsyncGenerator<
+        LanguageModelV3StreamPart,
+        void,
+        unknown
+      > {
+        try {
+          const streamResult = await nativeStreamText(model, messages, {
+            abortSignal: options.abortSignal,
           });
+
+          // Emit stream start
+          yield {
+            type: "stream-start",
+            warnings: [],
+          };
+
+          // Emit text start
+          yield {
+            type: "text-start",
+            id: textId,
+          };
+
+          let totalText = "";
+
+          // Stream text chunks as deltas
+          for await (const chunk of streamResult.textStream) {
+            totalText += chunk;
+            yield {
+              type: "text-delta",
+              id: textId,
+              delta: chunk,
+            };
+          }
+
+          // Emit text end
+          yield {
+            type: "text-end",
+            id: textId,
+          };
+
+          // Get finish reason
+          const finishReason = await streamResult.finishReason;
+
+          // Emit finish with proper usage format
+          yield {
+            type: "finish",
+            finishReason: mapFinishReason(finishReason),
+            usage: createUsage(undefined, Math.ceil(totalText.length / 4)),
+          };
+        } catch (error) {
+          yield {
+            type: "error",
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
         }
-
-        // Emit text end
-        await writer.write({
-          type: "text-end",
-          id: textId,
-        });
-
-        // Get finish reason
-        const finishReason = await streamResult.finishReason;
-
-        // Emit finish with proper usage format
-        await writer.write({
-          type: "finish",
-          finishReason: mapFinishReason(finishReason),
-          usage: createUsage(undefined, Math.ceil(totalText.length / 4)),
-        });
-
-        await writer.close();
-      } catch (error) {
-        await writer.write({
-          type: "error",
-          error: error instanceof Error ? error : new Error(String(error)),
-        });
-        await writer.close();
-      }
-    })();
+      },
+    );
 
     return {
-      stream: readable,
+      stream,
     };
   }
 }
