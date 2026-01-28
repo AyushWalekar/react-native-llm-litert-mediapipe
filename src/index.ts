@@ -36,3 +36,9 @@ export {
   type MediaPipeLlmModelId,
   type MediaPipeLlmModelSettings,
 } from "./ai-sdk-provider";
+
+// Polyfills for React Native compatibility with AI SDK
+export {
+  patchURLProtocol,
+  needsURLProtocolPatch,
+} from "./polyfills/patch-url-protocol";
