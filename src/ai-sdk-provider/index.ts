@@ -45,3 +45,40 @@ export type {
   LanguageModelV3StreamPart,
   LanguageModelV3Usage,
 } from "@ai-sdk/provider";
+
+/**
+ * Download function that skips all downloads for local file handling.
+ *
+ * Use this with AI SDK's experimental_download option when using local files
+ * (images, audio) with the MediaPipe LLM provider. This prevents AI SDK from
+ * attempting to fetch local file:// or content:// URLs, which would fail
+ * in React Native since these protocols aren't HTTP-fetchable.
+ *
+ * @example
+ * ```typescript
+ * import { generateText } from 'ai';
+ * import { createMediaPipeLlm, noopDownload } from 'react-native-llm-litert-mediapipe';
+ *
+ * const mediapipe = createMediaPipeLlm({ modelPath: '...' });
+ *
+ * const result = await generateText({
+ *   model: mediapipe('gemma-3n'),
+ *   messages: [
+ *     { role: 'user', content: [
+ *       { type: 'image', image: '/path/to/image.jpg', mediaType: 'image/jpeg' },
+ *       { type: 'text', text: 'What is in this image?' }
+ *     ]}
+ *   ],
+ *   experimental_download: noopDownload,
+ * });
+ * ```
+ */
+export const noopDownload = async (
+  requestedDownloads: Array<{ url: URL; isUrlSupportedByModel: boolean }>,
+): Promise<
+  Array<{ data: Uint8Array; mediaType: string | undefined } | null>
+> => {
+  // Return null for all URLs - the MediaPipe provider handles local files natively
+  // Returning null tells AI SDK to pass the URL through as-is without downloading
+  return requestedDownloads.map(() => null);
+};

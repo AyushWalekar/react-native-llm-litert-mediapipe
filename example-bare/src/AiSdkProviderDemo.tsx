@@ -36,7 +36,7 @@ import RNFS from 'react-native-fs';
 
 // On-device provider from our library
 // Note: When using as a published package, import from 'react-native-llm-litert-mediapipe/ai-sdk'
-import {createMediaPipeLlm} from 'react-native-llm-litert-mediapipe';
+import {createMediaPipeLlm, noopDownload} from 'react-native-llm-litert-mediapipe';
 import type {
   ContentPart,
   TextPart,
@@ -213,12 +213,14 @@ export default function AiSdkProviderDemo() {
 
       // Use AI SDK generateText - same API as OpenAI/Google!
       // Cast to any to handle type differences between library version and AI SDK
+      // Use noopDownload to prevent AI SDK from trying to fetch local file:// URLs
       const result = await generateText({
         model: model as any,
         messages: [
           {role: 'system', content: 'You are a helpful AI assistant.'},
           {role: 'user', content: content as any},
         ],
+        experimental_download: noopDownload,
       });
 
       setResponse(result.text);
@@ -283,12 +285,14 @@ export default function AiSdkProviderDemo() {
 
       // Use AI SDK streamText - same API as OpenAI/Google!
       // Cast to any to handle type differences between library version and AI SDK
+      // Use noopDownload to prevent AI SDK from trying to fetch local file:// URLs
       const result = streamText({
         model: model as any,
         messages: [
           {role: 'system', content: 'You are a helpful AI assistant.'},
           {role: 'user', content: content as any},
         ],
+        experimental_download: noopDownload,
       });
 
       // Iterate over stream - same as cloud providers
@@ -333,6 +337,7 @@ export default function AiSdkProviderDemo() {
           schema: SentimentSchema,
         }),
         prompt: structuredPrompt,
+        experimental_download: noopDownload,
       });
 
       setStructuredResult(result.output as SentimentResult);

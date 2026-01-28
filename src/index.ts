@@ -30,6 +30,7 @@ export { ModelManager, modelManager, type ModelInfo } from "./ModelManager";
 export {
   createMediaPipeLlm,
   MediaPipeLlmLanguageModel,
+  noopDownload,
   type MediaPipeLlmProvider,
   type MediaPipeLlmProviderSettings,
   type MediaPipeLlmModelId,
