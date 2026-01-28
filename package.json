@@ -1,7 +1,7 @@
 {
   "name": "react-native-llm-litert-mediapipe",
   "version": "1.0.0",
-  "description": "React Native module for on-device LLM inference using LiteRT/MediaPipe (Gemma 3n)",
+  "description": "React Native module for on-device LLM inference using LiteRT/MediaPipe with AI SDK V3 compatible provider",
   "main": "lib/index.js",
   "module": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -52,9 +52,14 @@
     "gemma3n",
     "on-device",
     "ai",
+    "ai-sdk",
+    "vercel-ai",
     "inference",
     "android",
-    "ios"
+    "ios",
+    "litert",
+    "local-llm",
+    "edge-ai"
   ],
   "repository": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe",
   "bugs": {
@@ -65,18 +70,26 @@
   "homepage": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe#readme",
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.4",
+    "@stardazed/streams-text-encoding": "^1.0.2",
     "@types/react": "^19.0.0",
+    "@ungap/structured-clone": "^1.2.0",
     "ai": "^6.0.0",
     "react": "^19.0.0",
     "react-native": "^0.79.6",
+    "text-encoding-polyfill": "^0.6.7",
     "typescript": "^5.0.0",
+    "web-streams-polyfill": "^4.0.0",
     "zod": "^4.3.5"
   },
   "peerDependencies": {
     "@ai-sdk/provider": ">=3.0.0",
+    "@stardazed/streams-text-encoding": ">=1.0.0",
+    "@ungap/structured-clone": ">=1.0.0",
     "ai": ">=4.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.70.0",
+    "text-encoding-polyfill": ">=0.6.0",
+    "web-streams-polyfill": ">=4.0.0",
     "zod": ">=3.0.0 || >=4.0.0"
   },
   "peerDependenciesMeta": {
@@ -87,6 +100,18 @@
       "optional": true
     },
     "zod": {
+      "optional": true
+    },
+    "@stardazed/streams-text-encoding": {
+      "optional": true
+    },
+    "@ungap/structured-clone": {
+      "optional": true
+    },
+    "text-encoding-polyfill": {
+      "optional": true
+    },
+    "web-streams-polyfill": {
       "optional": true
     }
   },

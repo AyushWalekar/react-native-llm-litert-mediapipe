@@ -50,3 +50,9 @@ export {
   streamToAsyncGenerator,
   type AsyncIterableStream,
 } from "./polyfills/patch-readable-stream-async-iterator";
+
+export {
+  setupAiSdkPolyfills,
+  checkPolyfillStatus,
+  type SetupPolyfillsOptions,
+} from "./polyfills/setup-polyfills";

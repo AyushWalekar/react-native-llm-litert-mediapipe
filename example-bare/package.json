@@ -27,6 +27,7 @@
     "react-native-linear-gradient": "^2.8.3",
     "react-native-live-audio-stream": "^1.1.1",
     "react-native-llm-litert-mediapipe": "file:..",
+    "text-encoding-polyfill": "^0.6.7",
     "web-streams-polyfill": "^4.2.0",
     "zod": "^4.3.5"
   },

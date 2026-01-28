@@ -155,7 +155,6 @@ export default function GeminiApiDemo() {
         text: prompt,
       });
 
-      console.log('[Debug] Starting streamText call...');
       const result = streamText({
         model: streamingModel,
         messages: [
@@ -166,37 +165,14 @@ export default function GeminiApiDemo() {
         ],
       });
 
-      // Try using fullStream instead to get more insight into the error
-      console.log('[Debug] Trying fullStream...');
-      const fullStream = result.fullStream;
-      console.log('[Debug] fullStream type:', typeof fullStream);
-      console.log(
-        '[Debug] fullStream constructor:',
-        fullStream?.constructor?.name,
-      );
-
-      // Use streamToAsyncGenerator to wrap the fullStream for async iteration
-      for await (const part of streamToAsyncGenerator(fullStream)) {
-        console.log('[Debug] Received part:', JSON.stringify(part));
-        if (part.type === 'text-delta') {
-          setResponse(prev => prev + part.text);
-        } else if (part.type === 'error') {
-          console.error('[Debug] Stream error part:', part);
-        }
+      // Use streamToAsyncGenerator to wrap the textStream for async iteration
+      // This is needed because AI SDK's bundled code may not have Symbol.asyncIterator
+      // properly set when running in React Native's Hermes engine
+      for await (const textPart of streamToAsyncGenerator(result.textStream)) {
+        setResponse(prev => prev + textPart);
       }
-      console.log('[Debug] Stream completed successfully');
     } catch (error) {
       console.error('Streaming error:', error);
-      // Log full error details for debugging
-      if (error && typeof error === 'object') {
-        console.error('Error name:', (error as any).name);
-        console.error('Error message:', (error as any).message);
-        console.error('Error cause:', (error as any).cause);
-        console.error('Error stack:', (error as any).stack);
-        if ((error as any).responseBody) {
-          console.error('Response body:', (error as any).responseBody);
-        }
-      }
       Alert.alert(
         'Error',
         `Streaming failed: ${
