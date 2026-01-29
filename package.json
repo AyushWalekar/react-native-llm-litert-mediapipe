@@ -1,12 +1,28 @@
 {
   "name": "react-native-llm-litert-mediapipe",
   "version": "1.0.0",
-  "description": "React Native module for on-device LLM inference using LiteRT/MediaPipe (Gemma 3n)",
+  "description": "React Native module for on-device LLM inference using LiteRT/MediaPipe with AI SDK V3 compatible provider",
   "main": "lib/index.js",
   "module": "lib/index.js",
   "types": "lib/index.d.ts",
   "react-native": "src/index.ts",
   "source": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "require": "./lib/index.js",
+      "react-native": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./ai-sdk": {
+      "types": "./lib/ai-sdk-provider/index.d.ts",
+      "import": "./lib/ai-sdk-provider/index.js",
+      "require": "./lib/ai-sdk-provider/index.js",
+      "react-native": "./src/ai-sdk-provider/index.ts",
+      "default": "./lib/ai-sdk-provider/index.js"
+    }
+  },
   "files": [
     "src",
     "lib",
@@ -36,9 +52,14 @@
     "gemma3n",
     "on-device",
     "ai",
+    "ai-sdk",
+    "vercel-ai",
     "inference",
     "android",
-    "ios"
+    "ios",
+    "litert",
+    "local-llm",
+    "edge-ai"
   ],
   "repository": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe",
   "bugs": {
@@ -48,19 +69,49 @@
   "license": "MIT",
   "homepage": "https://github.com/AyushWalekar/react-native-llm-litert-mediapipe#readme",
   "devDependencies": {
+    "@ai-sdk/provider": "^3.0.4",
+    "@stardazed/streams-text-encoding": "^1.0.2",
     "@types/react": "^19.0.0",
+    "@ungap/structured-clone": "^1.2.0",
+    "ai": "^6.0.0",
     "react": "^19.0.0",
     "react-native": "^0.79.6",
+    "text-encoding-polyfill": "^0.6.7",
     "typescript": "^5.0.0",
+    "web-streams-polyfill": "^4.0.0",
     "zod": "^4.3.5"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": ">=3.0.0",
+    "@stardazed/streams-text-encoding": ">=1.0.0",
+    "@ungap/structured-clone": ">=1.0.0",
+    "ai": ">=4.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.70.0",
-    "zod": ">=4.0.0"
+    "text-encoding-polyfill": ">=0.6.0",
+    "web-streams-polyfill": ">=4.0.0",
+    "zod": ">=3.0.0 || >=4.0.0"
   },
   "peerDependenciesMeta": {
+    "@ai-sdk/provider": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
     "zod": {
+      "optional": true
+    },
+    "@stardazed/streams-text-encoding": {
+      "optional": true
+    },
+    "@ungap/structured-clone": {
+      "optional": true
+    },
+    "text-encoding-polyfill": {
+      "optional": true
+    },
+    "web-streams-polyfill": {
       "optional": true
     }
   },

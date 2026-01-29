@@ -1,42 +1,25 @@
-import { Platform } from 'react-native';
-import structuredClone from '@ungap/structured-clone';
-import { TransformStream, ReadableStream, WritableStream } from 'web-streams-polyfill';
-import { TextEncoderStream, TextDecoderStream } from '@stardazed/streams-text-encoding';
+/**
+ * Example app entry point demonstrating the react-native-llm-litert-mediapipe library.
+ *
+ * IMPORTANT: The setupAiSdkPolyfills() call must be at the very top of this file,
+ * before any other imports that might use streams or the AI SDK.
+ */
+
+// STEP 1: Set up AI SDK polyfills (MUST be called before other imports)
+// This sets up all required polyfills for AI SDK streaming in React Native:
+// - Symbol.asyncIterator
+// - TextEncoder/TextDecoder
+// - ReadableStream/WritableStream/TransformStream
+// - TextEncoderStream/TextDecoderStream
+// - structuredClone
+// - URL.protocol
+import { setupAiSdkPolyfills } from 'react-native-llm-litert-mediapipe';
+
+setupAiSdkPolyfills({ verbose: true });
+
+// STEP 2: Now import React Native and your app
 import { AppRegistry } from 'react-native';
 import RootNavigator from './src/RootNavigator';
 import { name as appName } from './app.json';
-
-if (typeof process === 'undefined') {
-    global.process = { env: {} };
-}
-
-if (Platform.OS !== 'web') {
-    global.TransformStream = TransformStream;
-    global.ReadableStream = ReadableStream;
-    global.WritableStream = WritableStream;
-    global.TextEncoderStream = TextEncoderStream;
-    global.TextDecoderStream = TextDecoderStream;
-    global.structuredClone = structuredClone;
-
-    const setupPolyfills = async () => {
-        const { polyfillGlobal } = await import(
-            'react-native/Libraries/Utilities/PolyfillFunctions'
-        );
-
-        const { TextEncoderStream, TextDecoderStream } = await import(
-            '@stardazed/streams-text-encoding'
-        );
-
-        if (!('structuredClone' in global)) {
-            console.log('Polyfilling structuredClone');
-            polyfillGlobal('structuredClone', () => structuredClone);
-        }
-
-        polyfillGlobal('TextEncoderStream', () => TextEncoderStream);
-        polyfillGlobal('TextDecoderStream', () => TextDecoderStream);
-    };
-
-    setupPolyfills();
-}
 
 AppRegistry.registerComponent(appName, () => RootNavigator);

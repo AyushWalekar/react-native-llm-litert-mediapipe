@@ -13,11 +13,23 @@ import LinearGradient from 'react-native-linear-gradient';
 
 import StandardApiDemo from './StandardApiDemo';
 import GeminiApiDemo from './GeminiApiDemo';
+import AiSdkProviderDemo from './AiSdkProviderDemo';
 
-type Tab = 'local' | 'gemini';
+type Tab = 'local' | 'ai-sdk' | 'gemini';
 
 export default function RootNavigator() {
-  const [activeTab, setActiveTab] = useState<Tab>('local');
+  const [activeTab, setActiveTab] = useState<Tab>('ai-sdk');
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'local':
+        return <StandardApiDemo />;
+      case 'ai-sdk':
+        return <AiSdkProviderDemo />;
+      case 'gemini':
+        return <GeminiApiDemo />;
+    }
+  };
 
   return (
     <LinearGradient
@@ -35,7 +47,18 @@ export default function RootNavigator() {
                 styles.tabText,
                 activeTab === 'local' && styles.activeTabText,
               ]}>
-              Local LLM
+              Native API
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'ai-sdk' && styles.activeTab]}
+            onPress={() => setActiveTab('ai-sdk')}>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === 'ai-sdk' && styles.activeTabText,
+              ]}>
+              AI SDK
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -46,11 +69,11 @@ export default function RootNavigator() {
                 styles.tabText,
                 activeTab === 'gemini' && styles.activeTabText,
               ]}>
-              Gemini API
+              Cloud API
             </Text>
           </TouchableOpacity>
         </View>
-        {activeTab === 'local' ? <StandardApiDemo /> : <GeminiApiDemo />}
+        {renderContent()}
       </SafeAreaView>
     </LinearGradient>
   );

@@ -16,13 +16,14 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 
 import {createGoogleGenerativeAI} from '@ai-sdk/google';
-import {generateText, streamText, generateObject, Output} from 'ai';
+import {generateText, streamText, Output} from 'ai';
 import {launchImageLibrary, Asset} from 'react-native-image-picker';
 import {z} from 'zod';
 import {createOpenAI} from '@ai-sdk/openai';
 import {fetch as streamingFetch} from 'react-native-fetch-api';
 import Config from 'react-native-config';
 import {OPENAI_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY} from '@env';
+import {streamToAsyncGenerator} from 'react-native-llm-litert-mediapipe';
 
 const SentimentSchema = z.object({
   sentiment: z.enum(['positive', 'negative', 'neutral']),
@@ -164,8 +165,10 @@ export default function GeminiApiDemo() {
         ],
       });
 
-      // Iterate over the text stream to get incremental updates
-      for await (const textPart of result.textStream) {
+      // Use streamToAsyncGenerator to wrap the textStream for async iteration
+      // This is needed because AI SDK's bundled code may not have Symbol.asyncIterator
+      // properly set when running in React Native's Hermes engine
+      for await (const textPart of streamToAsyncGenerator(result.textStream)) {
         setResponse(prev => prev + textPart);
       }
     } catch (error) {
@@ -399,8 +402,8 @@ export default function GeminiApiDemo() {
                               structuredResult.sentiment === 'positive'
                                 ? '#27ae60'
                                 : structuredResult.sentiment === 'negative'
-                                ? '#e74c3c'
-                                : '#f39c12',
+                                  ? '#e74c3c'
+                                  : '#f39c12',
                           },
                         ]}>
                         {structuredResult.sentiment.toUpperCase()}
